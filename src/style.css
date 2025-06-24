@@ -497,3 +497,12 @@ body {
 .notification.error {
     background: #ef4444;
 }
+
+.badge {
+  background-color: #e53e3e; /* red */
+  color: white;
+  border-radius: 50%;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  margin-left: 0.4rem;
+}

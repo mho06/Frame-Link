@@ -30,19 +30,28 @@ const Admin = ({
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString();
   };
+  const pendingApplicationsCount = applications?.filter(app => app.status === 'pending').length || 0;
+// const pendingPhotoReviewsCount = photoReviews?.filter(photo => photo.status === 'pending').length || 0;
+
+
 
   return (
     <div className="page">
       <div className="admin-nav">
         <div className="container">
           <div className="admin-nav-links">
-            <a 
-              href="#" 
-              className={`admin-nav-link ${adminSection === 'applications' ? 'active' : ''}`} 
-              onClick={() => showAdminSection('applications')}
-            >
-              Applications
-            </a>
+           <a 
+  href="#" 
+  className={`admin-nav-link ${adminSection === 'applications' ? 'active' : ''}`} 
+  onClick={() => showAdminSection('applications')}
+>
+  Applications
+  {pendingApplicationsCount > 0 && (
+    <span className="badge">{pendingApplicationsCount}</span>
+  )}
+</a>
+
+
             <a 
               href="#" 
               className={`admin-nav-link ${adminSection === 'photos' ? 'active' : ''}`} 

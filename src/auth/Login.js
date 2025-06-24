@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
+// src/pages/Login.js
 
-const LoginPage = ({ onLogin }) => {
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+const Login = ({ onLogin }) => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const handleSubmit = e => {
     e.preventDefault();
-    // Fake login logic (replace with real one)
+
+    // Replace this with real auth logic
     if (email && password) {
-      onLogin({ name: 'John Doe', role: 'user' }); // Sample user object
+      const user = { name: 'John Doe', role: 'user' }; // Fake user object
+      if (onLogin) {
+        onLogin(user); // Callback to set user in App state
+      }
+      navigate('/'); // Redirect to home
     } else {
       alert('Please enter email and password');
     }
+  };
+
+  const goToSignup = () => {
+    navigate('/signup'); // Make sure /signup route exists
   };
 
   return (
@@ -43,10 +56,13 @@ const LoginPage = ({ onLogin }) => {
         </button>
       </form>
       <p className="text-center mt-2">
-        Don’t have an account? <span className="nav-link" onClick={() => onLogin(null)}>Sign Up</span>
+        Don’t have an account?{' '}
+        <span className="nav-link nav-link-underline" onClick={goToSignup} style={{ cursor: 'pointer' }}>
+          Sign Up
+        </span>
       </p>
     </div>
   );
 };
 
-export default LoginPage;
+export default Login;

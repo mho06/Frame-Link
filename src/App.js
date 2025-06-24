@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import './style.css';
+import React, { useState } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
-import Login from './auth/Login'; // Make sure this file exists
+import Login from './Login'; // Make sure Login.js is in the same folder or adjust the path
 
 
 // Main App Component
@@ -444,7 +446,7 @@ const App = () => {
           <nav className="nav">
             <div className="logo">FrameLink</div>
             <div className="nav-links">
-              <span className="nav-link" onClick={() => navigate('/login')}>Login</span>
+              <Link to="/login" className="nav-link">Login</Link>
               <span className="nav-link nav-link-underline" onClick={() => showPage('directory')}>Photographers</span>
               {!currentUser ? (
                 <div id="nav-auth">

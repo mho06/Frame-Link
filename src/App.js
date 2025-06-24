@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './style.css';
+import { Routes, Route, useNavigate } from 'react-router-dom';
+import Login from './auth/Login'; // Make sure this file exists
+
 
 // Main App Component
 const App = () => {
@@ -10,6 +13,8 @@ const App = () => {
   const [photos, setPhotos] = useState([]);
   const [applications, setApplications] = useState([]);
   const [photoReviews, setPhotoReviews] = useState([]);
+  const navigate = useNavigate();
+
 
   // Form state for login
   const [loginEmail, setLoginEmail] = useState('');
@@ -439,11 +444,11 @@ const App = () => {
           <nav className="nav">
             <div className="logo">FrameLink</div>
             <div className="nav-links">
-              <span className="nav-link nav-link-underline" onClick={() => showPage('home')}>Gallery</span>
+              <span className="nav-link" onClick={() => navigate('/login')}>Login</span>
               <span className="nav-link nav-link-underline" onClick={() => showPage('directory')}>Photographers</span>
               {!currentUser ? (
                 <div id="nav-auth">
-                  <span className="nav-link" onClick={() => showPage('login')}>Login</span>
+                  <span className="nav-link" href="./auth/Login.js" onClick={() => showPage('login')}>Login</span>
                   <span className="btn btn-primary" onClick={() => showPage('register')}>Sign Up</span>
                 </div>
               ) : (

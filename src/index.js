@@ -1,7 +1,13 @@
 import React from 'react';
-import ReactDOM from 'react-dom/client'; // ⬅️ use 'react-dom/client' for React 18+
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 
-// ✅ Use createRoot instead of render
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
+root.render(
+  <Routes>
+  <Route path="/" element={<HomePage />} />
+  <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+</Routes>
+
+);

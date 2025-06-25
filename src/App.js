@@ -3,7 +3,6 @@ import { Routes, Route, useNavigate } from 'react-router-dom';
 import './style.css';
 import { supabase } from './supabase'; // adjust the path if needed
 
-
 // Import page components
 import HomePage from './HomePage';
 import Login from './Login';
@@ -34,6 +33,68 @@ const App = () => {
       setNotification({ show: false, message: '', type: 'success' });
     }, 3000);
   };
+
+// Function to fetch applications from Supabase
+const fetchApplications = async () => {
+  try {
+    console.log('Fetching applications from Supabase...');
+    
+    const { data, error } = await supabase
+      .from('applications')
+      .select('*');
+
+    if (error) {
+      console.error('Error fetching applications:', error);
+      showNotification('Failed to load applications', 'error');
+      return;
+    }
+
+    console.log('Raw Supabase data:', data);
+    console.log('Sample row structure:', data[0]); // Log the first row to see column names
+    
+    // Transform Supabase data to match your local state structure
+    const transformedApplications = data.map(app => {
+      let images = [];
+      
+      // Parse images if they exist and are a string
+      if (app.images) {
+        try {
+          images = typeof app.images === 'string' 
+            ? JSON.parse(app.images) 
+            : app.images;
+        } catch (e) {
+          console.warn('Failed to parse images for application', app.id, e);
+          images = [];
+        }
+      }
+      
+      return {
+        id: app.id,
+        userId: app.user_id,
+        name: app.name || '',
+        email: app.email || '',
+        experience: app.experience || '',
+        specialization: app.specialization || '',
+        portfolio: app.portfolio || '',
+        bio: app.bio || '',
+        status: app.status || 'pending',
+        images: images, // Use the actual images from the application
+        submittedAt: app.created_at || app.submitted_at || app.timestamp || new Date().toISOString()
+      };
+    });
+    
+    // Sort by ID in descending order (most recent first)
+    transformedApplications.sort((a, b) => b.id - a.id);
+    
+    console.log('Transformed applications:', transformedApplications);
+    console.log('Setting applications state with:', transformedApplications.length, 'applications');
+    setApplications(transformedApplications);
+    
+  } catch (error) {
+    console.error('Error in fetchApplications:', error);
+    showNotification('Failed to load applications', 'error');
+  }
+};
 
   // Initialize sample data
   const initializeData = () => {
@@ -138,34 +199,6 @@ const App = () => {
       }
     ]);
 
-    // Sample applications
-    setApplications([
-      {
-        id: 1,
-        userId: 4,
-        name: "David Park",
-        email: "david@example.com",
-        experience: "5-10",
-        specialization: "Fashion",
-        portfolio: "https://davidpark.com",
-        bio: "Fashion photographer with a passion for creative storytelling",
-        status: "pending",
-        submittedAt: new Date('2024-06-20')
-      },
-      {
-        id: 2,
-        userId: 5,
-        name: "Lisa Wang",
-        email: "lisa@example.com",
-        experience: "3-5",
-        specialization: "Wildlife",
-        portfolio: "https://lisawang.com",
-        bio: "Wildlife photographer documenting endangered species",
-        status: "pending",
-        submittedAt: new Date('2024-06-19')
-      }
-    ]);
-
     // Sample photo reviews
     setPhotoReviews([
       {
@@ -180,46 +213,18 @@ const App = () => {
   };
 
   // Authentication functions
-// const login = (email, password) => {
-//   const trimmedEmail = email.trim().toLowerCase();
-//   const trimmedPassword = password;
-
-//   console.log("Login Attempt:", trimmedEmail, trimmedPassword); // Debug
-
-//   if (trimmedEmail === 'admin@framelink.com' && trimmedPassword === 'admin123') {
-//     setCurrentUser({
-//       id: 999,
-//       name: 'Admin',
-//       email: trimmedEmail,
-//       role: 'admin'
-//     });
-//     showNotification('Login successful!', 'success');
-//     navigate('/');
-//   } else if (trimmedEmail === 'sarah@example.com' && trimmedPassword === 'photographer123') {
-//     setCurrentUser({
-//       id: 1,
-//       name: 'Sarah Johnson',
-//       email: trimmedEmail,
-//       role: 'photographer'
-//     });
-//     showNotification('Login successful!', 'success');
-//     navigate('/');
-//   } else {
-//     showNotification('Invalid login credentials', 'error');
-//   }
-// };
-const login = (userData) => {
-  setCurrentUser(userData);
-  showNotification('Login successful!', 'success');
-  navigate('/');
-};
-
-
-
+  const login = (userData) => {
+    setCurrentUser(userData);
+    showNotification('Login successful!', 'success');
+    navigate('/');
+  };
 
   const register = (name, email, password, country) => {
+    // Generate a unique ID for the user
+    const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     setCurrentUser({
-      id: Date.now(),
+      id: userId,
       name: name,
       email: email,
       role: 'user',
@@ -257,49 +262,50 @@ const login = (userData) => {
   };
 
   // Admin functions
-const approveApplication = async (appId) => {
-  const app = applications.find(a => a.id === appId);
-  if (!app) return;
+  const approveApplication = async (appId) => {
+    try {
+      const { error } = await supabase
+        .from('applications')
+        .update({ status: 'approved' })
+        .eq('id', appId);
 
-  // Update status in Supabase
-  const { error } = await supabase
-    .from('applications')
-    .update({ status: 'approved' })
-    .eq('id', appId);
+      if (error) {
+        console.error('Error approving application:', error);
+        showNotification('Failed to approve application', 'error');
+      } else {
+        const app = applications.find(a => a.id === appId);
+        showNotification(`${app?.name || 'Application'} approved as photographer!`, 'success');
+        
+        // Refresh applications from database
+        await fetchApplications();
+      }
+    } catch (error) {
+      console.error('Error in approveApplication:', error);
+      showNotification('Failed to approve application', 'error');
+    }
+  };
 
-  if (!error) {
-    setApplications(prev => prev.map(a =>
-      a.id === appId ? { ...a, status: 'approved' } : a
-    ));
-    showNotification(`${app.name} approved as photographer!`, 'success');
-  } else {
-    console.error(error); 
-    await setApplications();
+  const rejectApplication = async (appId) => {
+    try {
+      const { error } = await supabase
+        .from('applications')
+        .update({ status: 'rejected' })
+        .eq('id', appId);
 
-  }
-
-};
-
-const rejectApplication = async (appId) => {
-  const { error } = await supabase
-    .from('applications')
-    .update({ status: 'rejected' })
-    .eq('id', appId);
-
-  if (!error) {
-    setApplications(prev => prev.map(a =>
-      a.id === appId ? { ...a, status: 'rejected' } : a
-    ));
-    showNotification('Application rejected', 'success');
-  } else {
-    console.error(error); 
-    await setApplications();
-
-  }
-
-};
-
-
+      if (error) {
+        console.error('Error rejecting application:', error);
+        showNotification('Failed to reject application', 'error');
+      } else {
+        showNotification('Application rejected', 'success');
+        
+        // Refresh applications from database
+        await fetchApplications();
+      }
+    } catch (error) {
+      console.error('Error in rejectApplication:', error);
+      showNotification('Failed to reject application', 'error');
+    }
+  };
 
   const approvePhoto = (photoId) => {
     const photo = photoReviews.find(p => p.id === photoId);
@@ -330,57 +336,67 @@ const rejectApplication = async (appId) => {
     ));
     showNotification('Photo rejected', 'success');
   };
-
-  // const handleApplication = (formData) => {
-  //   if (!currentUser) {
-  //     showNotification('Please login first', 'error');
-  //     return;
-  //   }
-    
-  //   const newApplication = {
-  //     id: Date.now(),
-  //     userId: currentUser.id,
-  //     name: currentUser.name,
-  //     email: currentUser.email,
-  //     experience: formData.experience,
-  //     specialization: formData.specialization,
-  //     portfolio: formData.portfolio,
-  //     bio: formData.bio,
-  //     status: 'pending',
-  //     submittedAt: new Date()
-  //   };
-    
-  //   setApplications(prev => [...prev, newApplication]);
-  //   showNotification('Application submitted successfully! You will be notified once reviewed.', 'success');
-  //   navigate('/');
-  // };
-  const handleApplication = async (formData) => {
+const handleApplication = async (formData) => {
   if (!currentUser) {
     showNotification('Please login first', 'error');
     return;
   }
 
-  const { error } = await supabase.from('applications').insert({
-    user_id: currentUser.id,
-    name: currentUser.name,
-    email: currentUser.email,
-    experience: formData.experience,
-    specialization: formData.specialization,
-    portfolio: formData.portfolio,
-    bio: formData.bio,
-    status: 'pending'
-  });
+  console.log('Submitting application with currentUser:', currentUser);
+  console.log('Form data:', formData);
 
-  if (error) {
-    console.error(error);
-    showNotification('Failed to submit application.', 'error');
-  } else {
+  try {
+    // Prepare the images data
+    let imagesData = null;
+    
+    if (formData.images && formData.images.length > 0) {
+      // If user uploaded images, use them
+      imagesData = Array.isArray(formData.images) 
+        ? JSON.stringify(formData.images)
+        : formData.images; // In case it's already stringified
+    } else {
+      // If no images provided, set to empty array or null
+      imagesData = JSON.stringify([]);
+      console.warn('No images provided in application');
+    }
+
+    const applicationData = {
+      user_id: currentUser.id,
+      name: currentUser.name,
+      email: currentUser.email,
+      experience: formData.experience,
+      specialization: formData.specialization,
+      portfolio: formData.portfolio,
+      bio: formData.bio,
+      status: 'pending',
+      images: imagesData
+    };
+
+    console.log('Application data to insert:', applicationData);
+
+    const { data, error } = await supabase
+      .from('applications')
+      .insert(applicationData)
+      .select();
+
+    if (error) {
+      console.error('Supabase error:', error);
+      showNotification(`Failed to submit application: ${error.message}`, 'error');
+      return;
+    }
+
+    console.log('Application submitted successfully:', data);
     showNotification('Application submitted! You will be notified once reviewed.', 'success');
-    await setApplications();
+    
+    // Refresh applications from database to include the new one
+    await fetchApplications();
     navigate('/');
+    
+  } catch (error) {
+    console.error('Error in handleApplication:', error);
+    showNotification('Failed to submit application.', 'error');
   }
 };
-
 
   const handlePhotoUpload = (caption) => {
     // Simulate photo upload
@@ -405,30 +421,16 @@ const rejectApplication = async (appId) => {
   };
 
   // Initialize on mount
-useEffect(() => {
-  initializeData();
+  useEffect(() => {
+    initializeData();
+    fetchApplications(); // Load applications from Supabase on component mount
+  }, []);
 
-  // Load applications from Supabase
-// At the top of your App component, define this function:
-
-const fetchApplications = async () => {
-  const { data, error } = await supabase
-    .from('applications')
-    .select('*')
-    .order('submittedAt', { ascending: false });
-
-  if (error) {
-    showNotification('Failed to load applications', 'error');
-  } else {
-    setApplications(data);
-  }
-};
-
-
-
-fetchApplications();
-}, []);
-
+  // Add effect to debug applications state changes
+  useEffect(() => {
+    console.log('Applications state updated:', applications.length, 'applications');
+    console.log('Current applications:', applications);
+  }, [applications]);
 
   // Header component
   const Header = () => (
@@ -454,7 +456,6 @@ fetchApplications();
                 {currentUser.role === 'admin' && (
                   <span className="nav-link" onClick={() => navigate('/admin')}>Admin</span>
                 )}
-                {/* <span className="nav-link">{currentUser.name}</span> */}
                 <span className="nav-link" onClick={logout}>Logout</span>
               </div>
             )}

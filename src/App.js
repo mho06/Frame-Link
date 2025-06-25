@@ -34,6 +34,64 @@ const App = () => {
     }, 3000);
   };
 
+
+
+
+
+  
+
+  // Function to check user role and update if needed
+  const checkAndUpdateUserRole = async (user) => {
+    if (!user || !user.id) return user;
+
+    try {
+      // Check if user has approved photographer application
+      const { data: approvedApp, error } = await supabase
+        .from('applications')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .maybeSingle(); // Use maybeSingle() instead of single() to avoid errors when no rows found
+
+      if (error) {
+        console.error('Error checking user applications:', error);
+        return user;
+      }
+
+      if (approvedApp && user.role !== 'photographer') {
+        // User has approved application but role is not photographer - update it
+        const updatedUser = { ...user, role: 'photographer' };
+        setCurrentUser(updatedUser);
+        
+        // Also add to photographers list if not already there
+        const existingPhotographer = photographers.find(p => p.id === user.id);
+        if (!existingPhotographer) {
+          const newPhotographer = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            country: user.country,
+            specialization: approvedApp.specialization,
+            bio: approvedApp.bio,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=667eea&color=fff`,
+            availability: "available",
+            verified: true,
+            photoCount: 0,
+            followers: 0
+          };
+          setPhotographers(prev => [...prev, newPhotographer]);
+        }
+        
+        return updatedUser;
+      }
+
+      return user;
+    } catch (error) {
+      console.error('Error in checkAndUpdateUserRole:', error);
+      return user;
+    }
+  };
+
 // Function to fetch applications from Supabase
 const fetchApplications = async () => {
   try {
@@ -41,7 +99,8 @@ const fetchApplications = async () => {
     
     const { data, error } = await supabase
       .from('applications')
-      .select('*');
+      .select('*')
+      .order('id', { ascending: false }); // Order by ID descending (newest first)
 
     if (error) {
       console.error('Error fetching applications:', error);
@@ -83,9 +142,6 @@ const fetchApplications = async () => {
       };
     });
     
-    // Sort by ID in descending order (most recent first)
-    transformedApplications.sort((a, b) => b.id - a.id);
-    
     console.log('Transformed applications:', transformedApplications);
     console.log('Setting applications state with:', transformedApplications.length, 'applications');
     setApplications(transformedApplications);
@@ -111,7 +167,8 @@ const fetchApplications = async () => {
         availability: "available",
         verified: true,
         photoCount: 45,
-        followers: 1250
+        followers: 1250,
+        role: 'photographer'
       },
       {
         id: 2,
@@ -124,7 +181,8 @@ const fetchApplications = async () => {
         availability: "busy",
         verified: true,
         photoCount: 78,
-        followers: 2100
+        followers: 2100,
+        role: 'photographer'
       },
       {
         id: 3,
@@ -137,7 +195,8 @@ const fetchApplications = async () => {
         availability: "available",
         verified: true,
         photoCount: 89,
-        followers: 1800
+        followers: 1800,
+        role: 'photographer'
       }
     ]);
 
@@ -212,9 +271,39 @@ const fetchApplications = async () => {
     ]);
   };
 
+  // Function to update user role in database after approval
+  const updateUserRoleInDatabase = async (userId, newRole) => {
+    try {
+      // This would typically update a users table in your database
+      // For now, we'll just update the local state
+      console.log(`Updating user ${userId} role to ${newRole}`);
+      
+      // If the current user is being updated, update their role immediately
+      if (currentUser && currentUser.id === userId) {
+        const updatedUser = { ...currentUser, role: newRole };
+        setCurrentUser(updatedUser);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      return false;
+    }
+  };
+
   // Authentication functions
-  const login = (userData) => {
-    setCurrentUser(userData);
+  const login = async (userData) => {
+    // Set proper role based on user data
+    let userRole = 'user'; // Default role
+    
+    // Check if user is admin (you can customize this logic)
+    if (userData.email === 'admin@framelink.com') {
+      userRole = 'admin';
+    }
+    
+    const userWithRole = { ...userData, role: userRole };
+    const updatedUser = await checkAndUpdateUserRole(userWithRole);
+    setCurrentUser(updatedUser);
     showNotification('Login successful!', 'success');
     navigate('/');
   };
@@ -223,11 +312,19 @@ const fetchApplications = async () => {
     // Generate a unique ID for the user
     const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
+    // Set proper role - new users start as 'user'
+    let userRole = 'user';
+    
+    // Check if registering user is admin (you can customize this logic)
+    if (email === 'admin@framelink.com') {
+      userRole = 'admin';
+    }
+    
     setCurrentUser({
       id: userId,
       name: name,
       email: email,
-      role: 'user',
+      role: userRole,
       country: country
     });
     showNotification('Registration successful!', 'success');
@@ -236,6 +333,7 @@ const fetchApplications = async () => {
 
   const logout = () => {
     setCurrentUser(null);
+    setSelectedPhotographer(null);
     showNotification('Logged out successfully!', 'success');
     navigate('/');
   };
@@ -245,6 +343,74 @@ const fetchApplications = async () => {
     const photographer = photographers.find(p => p.id === photographerId);
     if (!photographer) return;
     setSelectedPhotographer(photographer);
+    navigate('/profile');
+  };
+
+  // View current user's profile
+  const viewMyProfile = () => {
+    if (!currentUser) {
+      showNotification('Please login to view your profile', 'error');
+      return;
+    }
+
+    if (currentUser.role === 'photographer') {
+      // Find the photographer data
+      const photographerData = photographers.find(p => p.id === currentUser.id);
+      if (photographerData) {
+        setSelectedPhotographer({ ...photographerData, role: 'photographer' });
+      } else {
+        // Create photographer profile from user data if not found
+        const tempPhotographer = {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          country: currentUser.country,
+          specialization: 'Not specified',
+          bio: 'Professional photographer',
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=667eea&color=fff`,
+          availability: "available",
+          verified: true,
+          photoCount: photos.filter(p => p.photographerId === currentUser.id).length,
+          followers: 0,
+          role: 'photographer'
+        };
+        setSelectedPhotographer(tempPhotographer);
+      }
+    } else if (currentUser.role === 'admin') {
+      // For admin users, create an admin profile
+      const adminProfile = {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        country: currentUser.country,
+        specialization: 'Administrator',
+        bio: 'Platform Administrator',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=dc2626&color=fff`,
+        availability: "N/A",
+        verified: true,
+        photoCount: 0,
+        followers: 0,
+        role: 'admin'
+      };
+      setSelectedPhotographer(adminProfile);
+    } else {
+      // For regular users, create a basic profile
+      const userProfile = {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        country: currentUser.country,
+        specialization: 'Platform Member',
+        bio: 'Member of Framelink',
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=6b7280&color=fff`,
+        availability: "N/A",
+        verified: false,
+        photoCount: 0,
+        followers: 0,
+        role: 'user'
+      };
+      setSelectedPhotographer(userProfile);
+    }
     navigate('/profile');
   };
 
@@ -263,27 +429,55 @@ const fetchApplications = async () => {
 
   // Admin functions
   const approveApplication = async (appId) => {
-    try {
-      const { error } = await supabase
-        .from('applications')
-        .update({ status: 'approved' })
-        .eq('id', appId);
+  try {
+    const { error } = await supabase
+      .from('applications')
+      .update({ status: 'approved' })
+      .eq('id', appId);
 
-      if (error) {
-        console.error('Error approving application:', error);
-        showNotification('Failed to approve application', 'error');
-      } else {
-        const app = applications.find(a => a.id === appId);
-        showNotification(`${app?.name || 'Application'} approved as photographer!`, 'success');
-        
-        // Refresh applications from database
-        await fetchApplications();
-      }
-    } catch (error) {
-      console.error('Error in approveApplication:', error);
+    if (error) {
+      console.error('Error approving application:', error);
       showNotification('Failed to approve application', 'error');
+    } else {
+      const app = applications.find(a => a.id === appId);
+      
+      // Add approved photographer to photographers list
+      if (app) {
+        const newPhotographer = {
+          id: app.userId,
+          name: app.name,
+          email: app.email,
+          country: 'Unknown', // You might want to add country to application form
+          specialization: app.specialization,
+          bio: app.bio,
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=667eea&color=fff`,
+          availability: "available", // Default to available when approved
+          verified: true,
+          photoCount: 0,
+          followers: 0,
+          role: 'photographer'
+        };
+        
+        // Check if photographer already exists
+        const existingPhotographer = photographers.find(p => p.id === app.userId);
+        if (!existingPhotographer) {
+          setPhotographers(prev => [...prev, newPhotographer]);
+        }
+
+        // Update user role in database and current user if applicable
+        await updateUserRoleInDatabase(app.userId, 'photographer');
+      }
+      
+      showNotification(`${app?.name || 'Application'} approved as photographer!`, 'success');
+      
+      // Refresh applications from database
+      await fetchApplications();
     }
-  };
+  } catch (error) {
+    console.error('Error in approveApplication:', error);
+    showNotification('Failed to approve application', 'error');
+  }
+};
 
   const rejectApplication = async (appId) => {
     try {
@@ -336,6 +530,7 @@ const fetchApplications = async () => {
     ));
     showNotification('Photo rejected', 'success');
   };
+
 const handleApplication = async (formData) => {
   if (!currentUser) {
     showNotification('Please login first', 'error');
@@ -413,12 +608,57 @@ const handleApplication = async (formData) => {
     showNotification('Photo uploaded and sent for review!', 'success');
   };
 
-  const handleProfileUpdate = (bio, availability) => {
+const saveAvatarFile = async (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // In a real app, you would upload this to your server/cloud storage
+      // For now, we'll just return the data URL
+      resolve(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+// Updated profile update handler
+const handleProfileUpdate = async (bio, availability, avatarFile, removeAvatar) => {
+  try {
+    let newAvatarUrl = selectedPhotographer?.avatar;
+
+    if (removeAvatar) {
+      // User wants to remove avatar
+      newAvatarUrl = '';
+    } else if (avatarFile) {
+      // User uploaded a new avatar
+      newAvatarUrl = await saveAvatarFile(avatarFile);
+    }
+
+    // Update in photographers array
     setPhotographers(prev => prev.map(p => 
-      p.id === currentUser.id ? { ...p, bio, availability } : p
+      p.id === currentUser.id ? { 
+        ...p, 
+        bio, 
+        availability,
+        avatar: newAvatarUrl
+      } : p
     ));
+    
+    // Also update selectedPhotographer if it's the current user's profile
+    if (selectedPhotographer && selectedPhotographer.id === currentUser.id) {
+      setSelectedPhotographer(prev => ({ 
+        ...prev, 
+        bio, 
+        availability,
+        avatar: newAvatarUrl
+      }));
+    }
+    
     showNotification('Profile updated successfully!', 'success');
-  };
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    showNotification('Failed to update profile', 'error');
+  }
+};
 
   // Initialize on mount
   useEffect(() => {
@@ -426,37 +666,80 @@ const handleApplication = async (formData) => {
     fetchApplications(); // Load applications from Supabase on component mount
   }, []);
 
+  // Check user role when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      checkAndUpdateUserRole(currentUser);
+    }
+  }, [currentUser]);
+
   // Add effect to debug applications state changes
   useEffect(() => {
     console.log('Applications state updated:', applications.length, 'applications');
     console.log('Current applications:', applications);
   }, [applications]);
 
+  // Generate user initials for avatar
+  const getUserInitials = (name) => {
+    if (!name) return 'U';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  // Generate avatar URL with user initials
+  const getUserAvatar = (user) => {
+    if (!user) return '';
+    const initials = getUserInitials(user.name);
+    let backgroundColor = '6b7280'; // Default gray
+    
+    if (user.role === 'admin') {
+      backgroundColor = 'dc2626'; // Red for admin
+    } else if (user.role === 'photographer') {
+      backgroundColor = '667eea'; // Blue for photographer
+    }
+    
+    return `https://ui-avatars.com/api/?name=${initials}&background=${backgroundColor}&color=fff&size=40`;
+  };
+
   // Header component
   const Header = () => (
     <header className="header">
       <div className="container">
         <nav className="nav">
-          <div className="logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>FrameLink</div>
+          <div className="logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>Framelink</div>
           <div className="nav-links">
             <span className="nav-link nav-link-underline" onClick={() => navigate('/directory')}>Photographers</span>
             {!currentUser ? (
               <div id="nav-auth">
-                <span className="nav-link" onClick={() => navigate('/login')}>Login</span>
-                <span className="btn btn-primary" onClick={() => navigate('/register')}>Sign Up</span>
+                <span className="nav-link nav-link-underline" onClick={() => navigate('/login')}>Login</span>
+                {/* class name was btn btn-primary */}
+                <span className="nav-link nav-link-underline" onClick={() => navigate('/register')}>Sign Up</span>
               </div>
             ) : (
-              <div id="nav-user">
+              <div id="nav-user" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <span className="nav-link nav-link-underline" onClick={viewMyProfile}>
+                  <img 
+                    src={getUserAvatar(currentUser)} 
+                    alt="Profile" 
+                    style={{ 
+                      width: '32px', 
+                      height: '32px', 
+                      borderRadius: '50%', 
+                      marginRight: '8px',
+                      verticalAlign: 'middle'
+                    }} 
+                  />
+                  My Profile
+                </span>
                 {currentUser.role === 'user' && (
-                  <span className="nav-link" onClick={() => navigate('/apply')}>Become Photographer</span>
+                  <span className="nav-link nav-link-underline" onClick={() => navigate('/apply')}>Become Photographer</span>
                 )}
                 {currentUser.role === 'photographer' && (
-                  <span className="nav-link" onClick={() => navigate('/dashboard')}>Dashboard</span>
+                  <span className="nav-link nav-link-underline" onClick={() => navigate('/dashboard')}>Dashboard</span>
                 )}
                 {currentUser.role === 'admin' && (
-                  <span className="nav-link" onClick={() => navigate('/admin')}>Admin</span>
+                  <span className="nav-link nav-link-underline" onClick={() => navigate('/admin')}>Admin</span>
                 )}
-                <span className="nav-link" onClick={logout}>Logout</span>
+                <span className="nav-link nav-link-underline" onClick={logout}>Logout</span>
               </div>
             )}
           </div>
@@ -494,6 +777,9 @@ const handleApplication = async (formData) => {
               photographer={selectedPhotographer}
               photos={photos}
               onContactPhotographer={contactPhotographer}
+              currentUser={currentUser}
+              isOwnProfile={selectedPhotographer?.id === currentUser?.id}
+              onProfileUpdate={handleProfileUpdate}
             />} />
             <Route path="/apply" element={<Apply 
               onSubmitApplication={handleApplication}

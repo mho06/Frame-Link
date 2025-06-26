@@ -27,17 +27,18 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
   const getRoleInfo = (role) => {
     switch (role) {
       case 'admin':
-        return { text: 'Administrator', color: '#dc2626', bgColor: '#fef2f2' };
+        return { text: 'Admin of Framelink', color: '#dc2626', bgColor: '#fef2f2' };
       case 'photographer':
-        return { text: 'Verified Photographer', color: '#059669', bgColor: '#f0fdf4' };
+        return { text: 'Photographer of Framelink', color: '#059669', bgColor: '#f0fdf4' };
+      case 'user':
       default:
-        return { text: 'Platform Member', color: '#6b7280', bgColor: '#f9fafb' };
+        return { text: 'Member of Framelink', color: '#6b7280', bgColor: '#f9fafb' };
     }
   };
 
-  const roleInfo = getRoleInfo(photographer.role);
+  // Use photographer's role, not currentUser's role
+  const roleInfo = getRoleInfo(photographer.role || 'user');
 
-  
   const handleSaveProfile = () => {
     if (onProfileUpdate) {
       // Pass all necessary data including the avatar file and removal flag
@@ -129,7 +130,7 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
               {photographer.name?.split(' ').map(n => n[0]).join('').toUpperCase()}
             </div>
           )}
-          {isOwnProfile && isEditing && (
+          {isOwnProfile && (
             <>
               <label style={{ position: 'absolute', bottom: 0, right: 0, cursor: 'pointer' }}>
                 <input
@@ -143,7 +144,8 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
                   borderRadius: '50%',
                   padding: '4px',
                   fontSize: '14px',
-                  border: '1px solid #ccc'
+                  border: '1px solid #ccc',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}>🖋️</span>
               </label>
               {avatarPreview && (
@@ -163,7 +165,8 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                   }}
                   title="Remove avatar"
                 >

@@ -77,7 +77,12 @@ const FullPageLoading = ({ message = "Loading..." }) => (
 // Main App Component
 const App = () => {
   // Application State
-  const [currentUser, setCurrentUser] = useState(null);
+  // const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+  const storedUser = localStorage.getItem('currentUser');
+  return storedUser ? JSON.parse(storedUser) : null;
+});
+
   const [photographers, setPhotographers] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -104,201 +109,317 @@ const App = () => {
 
   // Function to fetch real photographers from Supabase
   const fetchPhotographers = async () => {
-    try {
-      const { data: approvedApps, error } = await supabase
-        .from('applications')
-        .select('*')
-        .eq('status', 'approved');
+  try {
+    console.log('Fetching photographers from Supabase...');
+    
+    const { data: approvedApps, error } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('status', 'approved');
 
-      if (error) {
-        console.error('Error fetching photographers:', error);
-        return;
-      }
-
-      const photographersData = approvedApps.map(app => ({
-        id: app.user_id,
-        name: app.name,
-        email: app.email,
-        country: app.country || 'Unknown',
-        specialization: app.specialization,
-        bio: app.bio,
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=667eea&color=fff`,
-        availability: "available",
-        verified: true,
-        photoCount: 0, // Will be calculated separately if needed
-        followers: 0,
-        role: 'photographer'
-      }));
-
-      setPhotographers(photographersData);
-    } catch (error) {
-      console.error('Error in fetchPhotographers:', error);
+    if (error) {
+      console.error('Error fetching photographers:', error);
+      showNotification('Failed to load photographers', 'error');
+      return;
     }
-  };
+
+    console.log('Found approved applications:', approvedApps);
+
+    if (!approvedApps || approvedApps.length === 0) {
+      console.log('No approved applications found');
+      setPhotographers([]);
+      return;
+    }
+
+    const photographersData = approvedApps.map(app => ({
+      id: app.user_id,
+      name: app.name,
+      email: app.email,
+      country: app.country || 'Unknown',
+      specialization: app.specialization,
+      bio: app.bio,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=667eea&color=fff`,
+      availability: "available",
+      verified: true,
+      photoCount: 0, // Will be calculated separately if needed
+      followers: 0,
+      role: 'photographer'
+    }));
+
+    console.log('Setting photographers:', photographersData);
+    setPhotographers(photographersData);
+  } catch (error) {
+    console.error('Error in fetchPhotographers:', error);
+    setPhotographers([]);
+  }
+};
+
+const checkUserPhotographerStatus = async (userId) => {
+  try {
+    const { data: approvedApp, error } = await supabase
+      .from('applications')
+      .select('status')
+      .eq('user_id', userId)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      console.error('Error checking photographer status:', error);
+      return false;
+    }
+
+    return !!approvedApp;
+  } catch (error) {
+    console.error('Error in checkUserPhotographerStatus:', error);
+    return false;
+  }
+};
 
   // Function to fetch real photos from Supabase
-  const fetchPhotos = async () => {
-    try {
-      // Assuming you have a photos table
-      const { data, error } = await supabase
+  // Fix the fetchPhotos function
+const fetchPhotos = async () => {
+  try {
+    // Try the original query first
+    let { data, error } = await supabase
+      .from('photos')
+      .select(`
+        *,
+        profiles!photos_user_id_fkey (name)
+      `)
+      .eq('approved', true)
+      .order('created_at', { ascending: false });
+
+    // If the foreign key relationship doesn't work, fall back to a simpler query
+    if (error && error.code === 'PGRST200') {
+      console.log('Foreign key relationship not found, using simpler query');
+      const { data: photosData, error: photosError } = await supabase
         .from('photos')
-        .select(`
-          *,
-          profiles:user_id (name)
-        `)
+        .select('*')
         .eq('approved', true)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching photos:', error);
+      if (photosError) {
+        console.error('Error fetching photos:', photosError);
         return;
       }
 
-      const photosData = data.map(photo => ({
-        id: photo.id,
-        photographerId: photo.user_id,
-        photographerName: photo.profiles?.name || 'Unknown',
-        url: photo.url,
-        caption: photo.caption,
-        approved: photo.approved,
-        likes: photo.likes || 0,
-        createdAt: photo.created_at
-      }));
+      // Get user names separately
+      const userIds = [...new Set(photosData.map(photo => photo.user_id))];
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', userIds);
 
-      setPhotos(photosData);
-    } catch (error) {
-      console.error('Error in fetchPhotos:', error);
-      // If photos table doesn't exist, set empty array
-      setPhotos([]);
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        data = photosData.map(photo => ({ ...photo, profiles: null }));
+      } else {
+        data = photosData.map(photo => ({
+          ...photo,
+          profiles: profiles.find(p => p.id === photo.user_id)
+        }));
+      }
+    } else if (error) {
+      console.error('Error fetching photos:', error);
+      return;
     }
-  };
 
-  // Function to fetch pending photo reviews
-  const fetchPhotoReviews = async () => {
-    try {
-      const { data, error } = await supabase
+    const photosData = data.map(photo => ({
+      id: photo.id,
+      photographerId: photo.user_id,
+      photographerName: photo.profiles?.name || 'Unknown',
+      url: photo.url,
+      caption: photo.caption,
+      approved: photo.approved,
+      likes: photo.likes || 0,
+      createdAt: photo.created_at
+    }));
+
+    setPhotos(photosData);
+  } catch (error) {
+    console.error('Error in fetchPhotos:', error);
+    setPhotos([]);
+  }
+};
+
+// Fix the fetchPhotoReviews function
+const fetchPhotoReviews = async () => {
+  try {
+    // Try the original query first
+    let { data, error } = await supabase
+      .from('photos')
+      .select(`
+        *,
+        profiles!photos_user_id_fkey (name)
+      `)
+      .eq('approved', false)
+      .order('created_at', { ascending: false });
+
+    // If the foreign key relationship doesn't work, fall back to a simpler query
+    if (error && error.code === 'PGRST200') {
+      console.log('Foreign key relationship not found, using simpler query for reviews');
+      const { data: photosData, error: photosError } = await supabase
         .from('photos')
-        .select(`
-          *,
-          profiles:user_id (name)
-        `)
+        .select('*')
         .eq('approved', false)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching photo reviews:', error);
+      if (photosError) {
+        console.error('Error fetching photo reviews:', photosError);
         return;
       }
 
-      const reviewsData = data.map(photo => ({
-        id: photo.id,
-        photographerId: photo.user_id,
-        photographerName: photo.profiles?.name || 'Unknown',
-        url: photo.url,
-        caption: photo.caption,
-        status: 'pending',
-        submittedAt: photo.created_at
-      }));
+      // Get user names separately
+      const userIds = [...new Set(photosData.map(photo => photo.user_id))];
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', userIds);
 
-      setPhotoReviews(reviewsData);
-    } catch (error) {
-      console.error('Error in fetchPhotoReviews:', error);
-      setPhotoReviews([]);
+      if (profilesError) {
+        console.error('Error fetching profiles for reviews:', profilesError);
+        data = photosData.map(photo => ({ ...photo, profiles: null }));
+      } else {
+        data = photosData.map(photo => ({
+          ...photo,
+          profiles: profiles.find(p => p.id === photo.user_id)
+        }));
+      }
+    } else if (error) {
+      console.error('Error fetching photo reviews:', error);
+      return;
     }
-  };
+
+    const reviewsData = data.map(photo => ({
+      id: photo.id,
+      photographerId: photo.user_id,
+      photographerName: photo.profiles?.name || 'Unknown',
+      url: photo.url,
+      caption: photo.caption,
+      status: 'pending',
+      submittedAt: photo.created_at
+    }));
+
+    setPhotoReviews(reviewsData);
+  } catch (error) {
+    console.error('Error in fetchPhotoReviews:', error);
+    setPhotoReviews([]);
+  }
+};
 
   // Function to check user role and update if needed
   const checkAndUpdateUserRole = async (user) => {
-    if (!user || !user.id) return user;
+  if (!user || !user.id) return user;
 
-    try {
-      // Check if user has approved photographer application
-      const { data: approvedApp, error } = await supabase
-        .from('applications')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'approved')
-        .maybeSingle();
+  try {
+    // Check if user has approved photographer application and update role if needed
+    const { data: approvedApp, error } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'approved')
+      .maybeSingle();
 
-      if (error) {
-        console.error('Error checking user applications:', error);
-        return user;
-      }
-
-      if (approvedApp && user.role !== 'photographer') {
-        // User has approved application but role is not photographer - update it
-        const updatedUser = { ...user, role: 'photographer' };
-        setCurrentUser(updatedUser);
-        return updatedUser;
-      }
-
-      return user;
-    } catch (error) {
-      console.error('Error in checkAndUpdateUserRole:', error);
+    if (error) {
+      console.error('Error checking user applications:', error);
       return user;
     }
-  };
 
+    if (approvedApp && user.role !== 'photographer' && user.role !== 'admin') {
+      // User has approved application but role is not photographer - update it
+      // But don't override admin role
+      const updatedUser = { ...user, role: 'photographer' };
+      
+      // Update the role in the database as well
+      await updateUserRoleInDatabase(user.id, 'photographer');
+      
+      setCurrentUser(updatedUser);
+      return updatedUser;
+    }
+
+    return user;
+  } catch (error) {
+    console.error('Error in checkAndUpdateUserRole:', error);
+    return user;
+  }
+};
   // Function to fetch applications from Supabase
-  const fetchApplications = async () => {
-    setIsLoadingApplications(true);
-    try {
-      console.log('Fetching applications from Supabase...');
-      
-      const { data, error } = await supabase
+  // Fix the fetchApplications function
+const fetchApplications = async () => {
+  setIsLoadingApplications(true);
+  try {
+    console.log('Fetching applications from Supabase...');
+    
+    // Try to fetch with created_at ordering first
+    let { data, error } = await supabase
+      .from('applications')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    // If created_at column doesn't exist, try without ordering
+    if (error && error.code === '42703') {
+      console.log('created_at column not found, fetching without ordering');
+      const result = await supabase
         .from('applications')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching applications:', error);
-        showNotification('Failed to load applications', 'error');
-        return;
-      }
-
-      console.log('Raw Supabase data:', data);
+        .select('*');
       
-      // Transform Supabase data to match your local state structure
-      const transformedApplications = data.map(app => {
-        let images = [];
-        
-        // Parse images if they exist and are a string
-        if (app.images) {
-          try {
-            images = typeof app.images === 'string' 
-              ? JSON.parse(app.images) 
-              : app.images;
-          } catch (e) {
-            console.warn('Failed to parse images for application', app.id, e);
-            images = [];
-          }
-        }
-        
-        return {
-          id: app.id,
-          userId: app.user_id,
-          name: app.name || '',
-          email: app.email || '',
-          experience: app.experience || '',
-          specialization: app.specialization || '',
-          portfolio: app.portfolio || '',
-          bio: app.bio || '',
-          status: app.status || 'pending',
-          images: images,
-          submittedAt: app.created_at || new Date().toISOString()
-        };
-      });
-      
-      console.log('Transformed applications:', transformedApplications);
-      setApplications(transformedApplications);
-      
-    } catch (error) {
-      console.error('Error in fetchApplications:', error);
-      showNotification('Failed to load applications', 'error');
-    } finally {
-      setIsLoadingApplications(false);
+      data = result.data;
+      error = result.error;
     }
-  };
+
+    if (error) {
+      console.error('Error fetching applications:', error);
+      showNotification('Failed to load applications', 'error');
+      return;
+    }
+
+    console.log('Raw Supabase data:', data);
+    
+    // Transform Supabase data to match your local state structure
+    const transformedApplications = data.map(app => {
+      let images = [];
+      
+      // Parse images if they exist and are a string
+      if (app.images) {
+        try {
+          images = typeof app.images === 'string' 
+            ? JSON.parse(app.images) 
+            : app.images;
+        } catch (e) {
+          console.warn('Failed to parse images for application', app.id, e);
+          images = [];
+        }
+      }
+      
+      return {
+        id: app.id,
+        userId: app.user_id,
+        name: app.name || '',
+        email: app.email || '',
+        experience: app.experience || '',
+        specialization: app.specialization || '',
+        portfolio: app.portfolio || '',
+        bio: app.bio || '',
+        status: app.status || 'pending',
+        images: images,
+        // Use created_at if it exists, otherwise use current timestamp
+        submittedAt: app.created_at || new Date().toISOString()
+      };
+    });
+    
+    // Sort by submittedAt in JavaScript if database ordering failed
+    transformedApplications.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+    
+    console.log('Transformed applications:', transformedApplications);
+    setApplications(transformedApplications);
+    
+  } catch (error) {
+    console.error('Error in fetchApplications:', error);
+    showNotification('Failed to load applications', 'error');
+  } finally {
+    setIsLoadingApplications(false);
+  }
+};
 
   // Initialize real data from Supabase
   // const initializeData = async () => {
@@ -347,33 +468,41 @@ const App = () => {
 
   // Authentication functions
   const login = async (userData) => {
-    setIsLoggingIn(true);
-    try {
-      // Set proper role based on user data
-      let userRole = 'user'; // Default role
-      
-      // Check if user is admin (you can customize this logic)
-      if (userData.email === 'admin@framelink.com') {
-        userRole = 'admin';
+  setIsLoggingIn(true);
+  try {
+    let userWithCorrectRole = { ...userData };
+    
+    // If user is not admin, check if they should be photographer
+    if (userData.role !== 'admin') {
+      const isPhotographer = await checkUserPhotographerStatus(userData.id);
+      if (isPhotographer) {
+        userWithCorrectRole.role = 'photographer';
+        
+        // Update role in database if it's not already set
+        if (userData.role !== 'photographer') {
+          await supabase
+            .from('profiles')
+            .update({ role: 'photographer' })
+            .eq('id', userData.id);
+        }
       }
-      
-      const userWithRole = { ...userData, role: userRole };
-      const updatedUser = await checkAndUpdateUserRole(userWithRole);
-      
-      // Give a small delay to ensure state updates properly
-      setTimeout(() => {
-        setCurrentUser(updatedUser);
-        showNotification('Login successful!', 'success');
-        setIsLoggingIn(false);
-        navigate('/');
-      }, 500);
-      
-    } catch (error) {
-      console.error('Login error:', error);
-      showNotification('Login failed', 'error');
-      setIsLoggingIn(false);
     }
-  };
+    
+    // Set the user with the correct role
+    setCurrentUser(userWithCorrectRole);
+    localStorage.setItem('currentUser', JSON.stringify(userWithCorrectRole)); // in login
+
+    
+    showNotification('Login successful!', 'success');
+    setIsLoggingIn(false);
+    navigate('/');
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    showNotification('Login failed', 'error');
+    setIsLoggingIn(false);
+  }
+};
 
   const register = async (name, email, password, country) => {
     setIsLoggingIn(true);
@@ -400,6 +529,8 @@ const App = () => {
       // Give a small delay to ensure state updates properly
       setTimeout(() => {
         setCurrentUser(newUser);
+        localStorage.setItem('currentUser', JSON.stringify(newUser)); // in register
+
         showNotification('Registration successful!', 'success');
         setIsLoggingIn(false);
         navigate('/');
@@ -417,6 +548,8 @@ const App = () => {
     setSelectedPhotographer(null);
     showNotification('Logged out successfully!', 'success');
     navigate('/');
+    localStorage.removeItem('currentUser');
+
   };
 
   // View photographer profile
@@ -510,55 +643,52 @@ const App = () => {
 
   // Admin functions
   const approveApplication = async (appId) => {
-    try {
-      const { error } = await supabase
-        .from('applications')
-        .update({ status: 'approved' })
-        .eq('id', appId);
+  try {
+    // First, approve the application
+    const { error: approveError } = await supabase
+      .from('applications')
+      .update({ status: 'approved' })
+      .eq('id', appId);
 
-      if (error) {
-        console.error('Error approving application:', error);
-        showNotification('Failed to approve application', 'error');
-      } else {
-        const app = applications.find(a => a.id === appId);
-        
-        // Add approved photographer to photographers list
-        if (app) {
-          const newPhotographer = {
-            id: app.userId,
-            name: app.name,
-            email: app.email,
-            country: 'Unknown',
-            specialization: app.specialization,
-            bio: app.bio,
-            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=667eea&color=fff`,
-            availability: "available",
-            verified: true,
-            photoCount: 0,
-            followers: 0,
-            role: 'photographer'
-          };
-          
-          // Check if photographer already exists
-          const existingPhotographer = photographers.find(p => p.id === app.userId);
-          if (!existingPhotographer) {
-            setPhotographers(prev => [...prev, newPhotographer]);
-          }
-
-          // Update user role in database and current user if applicable
-          await updateUserRoleInDatabase(app.userId, 'photographer');
-        }
-        
-        showNotification(`${app?.name || 'Application'} approved as photographer!`, 'success');
-        
-        // Refresh applications from database
-        await fetchApplications();
-      }
-    } catch (error) {
-      console.error('Error in approveApplication:', error);
+    if (approveError) {
+      console.error('Error approving application:', approveError);
       showNotification('Failed to approve application', 'error');
+      return;
     }
-  };
+
+    const app = applications.find(a => a.id === appId);
+    
+    if (app) {
+      // Update user role in profiles table
+      const { error: roleError } = await supabase
+        .from('profiles')
+        .update({ role: 'photographer' })
+        .eq('id', app.userId);
+
+      if (roleError) {
+        console.error('Error updating user role:', roleError);
+        // Continue anyway, the application is approved
+      }
+
+      // If the current user is the one being approved, update their role immediately
+      if (currentUser && currentUser.id === app.userId) {
+        setCurrentUser(prev => ({ ...prev, role: 'photographer' }));
+      }
+      
+      showNotification(`${app.name} approved as photographer!`, 'success');
+    }
+    
+    // Refresh both applications and photographers from database
+    await Promise.all([
+      fetchApplications(),
+      fetchPhotographers()
+    ]);
+    
+  } catch (error) {
+    console.error('Error in approveApplication:', error);
+    showNotification('Failed to approve application', 'error');
+  }
+};
 
   const rejectApplication = async (appId) => {
     try {
@@ -775,16 +905,36 @@ const App = () => {
   };
 
   // Initialize on mount
+  // useEffect(() => {
+  //   // initializeData();
+  // }, []);
   useEffect(() => {
-    // initializeData();
-  }, []);
+  fetchPhotographers();
+  fetchPhotos();
+}, []);
+
 
   // Check user role when currentUser changes
   useEffect(() => {
-    if (currentUser) {
-      checkAndUpdateUserRole(currentUser);
-    }
-  }, [currentUser]);
+  // Only load admin data when admin logs in, and only once
+  if (currentUser?.role === 'admin') {
+    const loadAdminData = async () => {
+      try {
+        await Promise.all([
+          fetchPhotographers(),
+          fetchPhotos(),
+          fetchPhotoReviews(),
+          fetchApplications()
+        ]);
+      } catch (error) {
+        console.error('Error loading admin data:', error);
+        showNotification('Some admin data failed to load', 'error');
+      }
+    };
+    
+    loadAdminData();
+  }
+}, [currentUser?.id]);
 
   // Generate user initials for avatar
   const getUserInitials = (name) => {
@@ -822,31 +972,33 @@ const App = () => {
               </div>
             ) : (
               <div id="nav-user" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <span className="nav-link nav-link-underline" onClick={viewMyProfile}>
-                  <img 
-                    src={getUserAvatar(currentUser)} 
-                    alt="Profile" 
-                    style={{ 
-                      width: '32px', 
-                      height: '32px', 
-                      borderRadius: '50%', 
-                      marginRight: '8px',
-                      verticalAlign: 'middle'
-                    }} 
-                  />
-                  My Profile
-                </span>
-                {currentUser.role === 'user' && (
-                  <span className="nav-link nav-link-underline" onClick={() => navigate('/apply')}>Become Photographer</span>
-                )}
-                {currentUser.role === 'photographer' && (
-                  <span className="nav-link nav-link-underline" onClick={() => navigate('/dashboard')}>Dashboard</span>
-                )}
-                {currentUser.role === 'admin' && (
-                  <span className="nav-link nav-link-underline" onClick={() => navigate('/admin')}>Admin</span>
-                )}
-                <span className="nav-link nav-link-underline" onClick={logout}>Logout</span>
-              </div>
+  <span className="nav-link nav-link-underline" onClick={viewMyProfile}>
+    <img 
+      src={getUserAvatar(currentUser)} 
+      alt="Profile" 
+      style={{ 
+        width: '32px', 
+        height: '32px', 
+        borderRadius: '50%', 
+        marginRight: '8px',
+        verticalAlign: 'middle'
+      }} 
+    />
+    My Profile
+  </span>
+  {/* Only show "Become Photographer" for regular users, not admin */}
+  {currentUser.role === 'user' && (
+    <span className="nav-link nav-link-underline" onClick={() => navigate('/apply')}>Become Photographer</span>
+  )}
+  {currentUser.role === 'photographer' && (
+    <span className="nav-link nav-link-underline" onClick={() => navigate('/dashboard')}>Dashboard</span>
+  )}
+  {/* Admin section - always show for admin */}
+  {currentUser.role === 'admin' && (
+    <span className="nav-link nav-link-underline" onClick={() => navigate('/admin')}>Admin Panel</span>
+  )}
+  <span className="nav-link nav-link-underline" onClick={logout}>Logout</span>
+</div>
             )}
           </div>
         </nav>

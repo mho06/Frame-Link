@@ -230,8 +230,8 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
               placeholder="Tell us about yourself..."
             />
 
-            {/* Show availability options for photographers and users who might become photographers */}
-            {(photographer.role === 'photographer' || currentUser?.role === 'photographer') && (
+            {/* Show availability options only for photographers */}
+            {photographer.role === 'photographer' && (
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Availability:</label>
                 <select
@@ -303,7 +303,7 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
       ) : (
         <div className="text-center mt-2">
           <h3>{isOwnProfile ? 'No photos uploaded yet' : 'No photos available'}</h3>
-          {isOwnProfile && currentUser?.role === 'photographer' && (
+          {isOwnProfile && photographer.role === 'photographer' && (
             <p>
               <a href="/dashboard" className="btn btn-primary">
                 Upload Your First Photo

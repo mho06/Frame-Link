@@ -39,19 +39,21 @@ const HomePage = ({ photos, currentUser, onLikePhoto, onCommentPhoto, onViewPhot
           setLikedPhotos(userLikedPhotos);
 
           // Fetch total likes count for each photo
-          const { data: likesCountData, error: countError } = await supabase
+          const photoIds = photos.map(p => p.id);
+          const { data: allLikesData, error: countError } = await supabase
             .from('likes')
-            .select('photo_id, count(*)')
-            .in('photo_id', photos.map(p => p.id));
+            .select('photo_id')
+            .in('photo_id', photoIds);
 
           if (countError) {
             console.error('Error fetching likes count:', countError);
             return;
           }
 
+          // Count likes per photo
           const likesCount = {};
-          likesCountData.forEach(item => {
-            likesCount[item.photo_id] = item.count || 0;
+          photoIds.forEach(id => {
+            likesCount[id] = allLikesData.filter(like => like.photo_id === id).length;
           });
           setPhotoLikes(likesCount);
 
@@ -81,7 +83,6 @@ const HomePage = ({ photos, currentUser, onLikePhoto, onCommentPhoto, onViewPhot
           profiles!comments_user_id_fkey (
             id,
             full_name,
-            username,
             email
           )
         `)
@@ -100,7 +101,6 @@ const HomePage = ({ photos, currentUser, onLikePhoto, onCommentPhoto, onViewPhot
         let userName = 'Anonymous User';
         if (c.profiles) {
           userName = c.profiles.full_name || 
-                    c.profiles.username || 
                     (c.profiles.email ? c.profiles.email.split('@')[0] : 'Anonymous User');
         }
 
@@ -129,6 +129,7 @@ const HomePage = ({ photos, currentUser, onLikePhoto, onCommentPhoto, onViewPhot
 
   const handlePhotoClick = (photo) => {
     setSelectedPhoto(photo);
+    setNewComment(''); // Reset comment when opening modal
     document.body.style.overflow = 'hidden';
   };
 
@@ -160,11 +161,11 @@ const HomePage = ({ photos, currentUser, onLikePhoto, onCommentPhoto, onViewPhot
 
         if (error) {
           console.error('Error unliking photo:', error);
-          alert('Failed to unlike photo');
+          alert(`Failed to unlike photo: ${error.message}`);
           return;
         }
 
-        // Update local state
+        // Update local state only after successful database operation
         const newLikedPhotos = new Set(likedPhotos);
         newLikedPhotos.delete(photoId);
         setLikedPhotos(newLikedPhotos);
@@ -199,12 +200,12 @@ const HomePage = ({ photos, currentUser, onLikePhoto, onCommentPhoto, onViewPhot
               setLikedPhotos(new Set(likesData.map(like => like.photo_id)));
             }
           } else {
-            alert('Failed to like photo');
+            alert(`Failed to like photo: ${error.message}`);
           }
           return;
         }
 
-        // Update local state
+        // Update local state only after successful database operation
         const newLikedPhotos = new Set(likedPhotos);
         newLikedPhotos.add(photoId);
         setLikedPhotos(newLikedPhotos);
@@ -223,77 +224,93 @@ const HomePage = ({ photos, currentUser, onLikePhoto, onCommentPhoto, onViewPhot
       }
     } catch (error) {
       console.error('Error in handleLike:', error);
-      alert('An error occurred. Please try again.');
+      alert(`An error occurred: ${error.message}`);
     }
   };
 
-  // Add this debug code to your handleCommentSubmit function
-const handleCommentSubmit = async (e) => {
-  e.preventDefault();
-  
-  // Debug: Check current user structure
-  console.log('Current user object:', currentUser);
-  console.log('Current user ID:', currentUser?.id);
-  
-  // Verify Supabase auth state
-  const { data: { user }, error } = await supabase.auth.getUser();
-  console.log('Supabase auth user:', user);
-  console.log('Auth error:', error);
-  
-  if (!currentUser) {
-    alert('Please login to comment');
-    return;
-  }
-
-  const commentText = newComment.trim();
-  if (!commentText) return;
-
-  setIsSubmittingComment(true);
-
-  try {
-    // Use the Supabase user ID instead of currentUser.id if needed
-    const userId = user?.id || currentUser.id;
+  const handleCommentSubmit = async (e) => {
+    e.preventDefault();
     
-    console.log('Attempting to insert comment with:', {
-      photo_id: selectedPhoto.id,
-      user_id: userId,
-      comment: commentText
-    });
-
-    const { data, error } = await supabase
-      .from('comments')
-      .insert([{
-        photo_id: selectedPhoto.id,
-        user_id: userId, // Use the verified user ID
-        comment: commentText
-      }])
-      .select(`
-        id, 
-        photo_id, 
-        comment, 
-        created_at,
-        profiles!comments_user_id_fkey (
-          id,
-          full_name,
-          email
-        )
-      `);
-
-    if (error) {
-      console.error('Error inserting comment:', error);
-      alert('Failed to submit comment. Please try again.');
+    if (!currentUser) {
+      alert('Please login to comment');
       return;
     }
 
-    // Rest of your comment submission logic...
-    
-  } catch (error) {
-    console.error('Error submitting comment:', error);
-    alert('Failed to submit comment. Please try again.');
-  } finally {
-    setIsSubmittingComment(false);
-  }
-};
+    const commentText = newComment.trim();
+    if (!commentText) return;
+
+    setIsSubmittingComment(true);
+
+    try {
+      console.log('Attempting to insert comment with:', {
+        photo_id: selectedPhoto.id,
+        user_id: currentUser.id,
+        comment: commentText
+      });
+
+      const { data, error } = await supabase
+        .from('comments')
+        .insert([{
+          photo_id: selectedPhoto.id,
+          user_id: currentUser.id,
+          comment: commentText
+        }])
+        .select(`
+          id, 
+          photo_id, 
+          comment, 
+          created_at,
+          profiles!comments_user_id_fkey (
+            id,
+            full_name,
+            email
+          )
+        `);
+
+      if (error) {
+        console.error('Error inserting comment:', error);
+        alert(`Failed to submit comment: ${error.message}`);
+        return;
+      }
+
+      console.log('Comment inserted successfully:', data);
+
+      // Update local comments state
+      if (data && data.length > 0) {
+        const newCommentData = data[0];
+        let userName = 'Anonymous User';
+        if (newCommentData.profiles) {
+          userName = newCommentData.profiles.full_name || 
+                    (newCommentData.profiles.email ? newCommentData.profiles.email.split('@')[0] : 'Anonymous User');
+        }
+
+        const formattedComment = {
+          id: newCommentData.id,
+          user: userName,
+          comment: newCommentData.comment,
+          timestamp: new Date(newCommentData.created_at).toLocaleString(),
+        };
+
+        setComments(prev => ({
+          ...prev,
+          [selectedPhoto.id]: [...(prev[selectedPhoto.id] || []), formattedComment]
+        }));
+
+        // Clear the input
+        setNewComment('');
+
+        // Call parent callback if provided
+        if (onCommentPhoto) {
+          await onCommentPhoto(selectedPhoto.id, commentText);
+        }
+      }
+    } catch (error) {
+      console.error('Error submitting comment:', error);
+      alert(`Failed to submit comment: ${error.message}`);
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
 
   const handlePhotographerClick = (photo) => {
     if (onViewPhotographer) {

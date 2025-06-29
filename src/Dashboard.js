@@ -109,17 +109,17 @@ const renderOverviewTab = () => (
     <div className="stats-grid">
       <div className="stat-card">
         <h3>Photos Uploaded</h3>
-        <div className="stat-number">{userPhotos.length}</div> {/* This was hardcoded as 0 */}
+        <div className="stat-number">{photoStats.total || 0}</div>
         <p>Total photos submitted</p>
       </div>
       <div className="stat-card">
         <h3>Approved Photos</h3>
-        <div className="stat-number" style={{ color: '#10b981' }}>{photoStats.approved}</div>
+        <div className="stat-number" style={{ color: '#10b981' }}>{photoStats.approved || 0}</div>
         <p>Live in gallery</p>
       </div>
       <div className="stat-card">
         <h3>Pending Review</h3>
-        <div className="stat-number" style={{ color: '#f59e0b' }}>{photoStats.pending}</div>
+        <div className="stat-number" style={{ color: '#f59e0b' }}>{photoStats.pending || 0}</div>
         <p>Awaiting admin approval</p>
       </div>
       <div className="stat-card">
@@ -128,7 +128,33 @@ const renderOverviewTab = () => (
         <p>Current availability</p>
       </div>
     </div>
-    {/* Rest of your overview content... */}
+    
+    {/* Add recent photos section */}
+    {userPhotos && userPhotos.length > 0 && (
+      <div className="recent-photos">
+        <h3>Recent Photos</h3>
+        <div className="photo-grid">
+          {userPhotos.slice(0, 6).map(photo => (
+            <div key={photo.id} className="photo-preview-card">
+              <img 
+                src={photo.url} 
+                alt={photo.caption || 'Photo'} 
+                className="photo-thumbnail"
+                onError={(e) => {
+                  e.target.src = 'https://via.placeholder.com/200x120?text=Image+Not+Found';
+                }}
+              />
+              <div className="photo-info">
+                <p className="photo-caption">{photo.caption || 'No caption'}</p>
+                <span className={`status-badge ${photo.status || 'pending'}`}>
+                  {photo.status || 'pending'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
   </div>
 );
 

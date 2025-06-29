@@ -106,9 +106,9 @@ body {
 .nav-link-underline:hover::after {
     transform: scaleX(1);
 }
-#nav-auth{
+/* #nav-auth{
 
-}
+} */
 
 /* ==========================================================================
    BUTTONS

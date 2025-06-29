@@ -1,0 +1,502 @@
+/* HomePage.css */
+
+.enhanced-photo-card {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.enhanced-photo-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+}
+
+.photo-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.photo-container img {
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.enhanced-photo-card:hover .photo-container img {
+  transform: scale(1.05);
+}
+
+.photo-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.3), transparent, rgba(0,0,0,0.7));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  display: flex;
+  align-items: flex-end;
+  padding: 16px;
+}
+
+.enhanced-photo-card:hover .photo-overlay {
+  opacity: 1;
+}
+
+.photo-stats {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.photo-info {
+  padding: 16px;
+}
+
+.photo-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.photographer-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.photographer-info:hover {
+  background-color: #f8f9fa;
+}
+
+.photographer-name {
+  color: #667eea;
+  font-weight: 500;
+}
+
+.verified-badge {
+  background: #10b981;
+  color: white;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.hero-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.featured-section {
+  margin-top: 64px;
+}
+
+.featured-section h2 {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.featured-section p {
+  text-align: center;
+  color: #666;
+  font-size: 18px;
+  margin-bottom: 48px;
+}
+
+.no-photos, .no-comments {
+  text-align: center;
+  padding: 48px 16px;
+  color: #666;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.photo-modal {
+  background: white;
+  border-radius: 16px;
+  max-width: 1200px;
+  max-height: 90vh;
+  width: 100%;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: background-color 0.2s ease;
+}
+
+.modal-close:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.modal-content {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.modal-image-section {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  min-height: 400px;
+}
+
+.modal-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.modal-info-section {
+  flex: 1;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  min-width: 350px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.photographer-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.photographer-profile:hover {
+  background-color: #f8f9fa;
+}
+
+.photographer-avatar {
+  width: 40px;
+  height: 40px;
+  background: #667eea;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  overflow: hidden;
+}
+
+.photographer-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photographer-profile h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.verified-badge-small {
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.photo-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #666;
+  font-size: 14px;
+}
+
+.modal-caption {
+  margin-bottom: 24px;
+}
+
+.modal-caption p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #333;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #eee;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: #f8f9fa;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.like-btn.liked {
+  color: #ff4757;
+  border-color: #ff4757;
+  background: #fff5f5;
+}
+
+.comments-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.comments-list {
+  flex: 1;
+  margin-bottom: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.comment {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.comment-avatar {
+  width: 32px;
+  height: 32px;
+  background: #e5e7eb;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.comment-content {
+  flex: 1;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.comment-user {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+
+.comment-time {
+  font-size: 12px;
+  color: #666;
+}
+
+.comment-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #333;
+}
+
+.comment-form {
+  margin-top: auto;
+}
+
+.comment-input-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.comment-input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 24px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.comment-input:focus {
+  border-color: #667eea;
+}
+
+.comment-submit {
+  width: 40px;
+  height: 40px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.comment-submit:hover:not(:disabled) {
+  background: #5a67d8;
+}
+
+.comment-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.login-prompt {
+  text-align: center;
+  padding: 16px;
+  color: #666;
+}
+
+.login-link {
+  color: #667eea;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.login-link:hover {
+  color: #5a67d8;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .photo-modal {
+    flex-direction: column;
+    max-height: 95vh;
+  }
+
+  .modal-info-section {
+    min-width: unset;
+    max-height: 50vh;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .hero-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .photographer-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .photo-stats {
+    gap: 8px;
+  }
+
+  .stat {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .photo-container img {
+    height: 200px;
+  }
+
+  .photo-info {
+    padding: 12px;
+  }
+
+  .modal-info-section {
+    padding: 16px;
+  }
+
+  .comments-list {
+    max-height: 200px;
+  }
+}

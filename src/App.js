@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import './style.css';
-import { supabase } from './supabase';
+import supabase from './supabase';
 
 // Import page components
 import HomePage from './HomePage';
@@ -74,7 +74,7 @@ const App = () => {
 
   // Loading states
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isLoadingApplications, setIsLoadingApplications] = useState(false);
+  const [setIsLoadingApplications] = useState(false);
   const [isSubmittingApplication, setIsSubmittingApplication] = useState(false);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 const location = useLocation();
@@ -150,7 +150,7 @@ const location = useLocation();
       // Try with join first
       let { data, error } = await supabase
         .from('photos')
-        .select(`*, profiles!photos_user_id_fkey (name)`)
+        .select(`*, profiles!photos_user_id_fkey (full_name)`)
         .eq('approved', true)
         .order('created_at', { ascending: false })
         .limit(30);
@@ -171,7 +171,7 @@ const location = useLocation();
         const userIds = [...new Set(photosData.map(photo => photo.user_id))];
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, name')
+          .select('id, full_name')
           .in('id', userIds);
 
         data = photosData.map(photo => ({
@@ -186,7 +186,7 @@ const location = useLocation();
       const photosData = (data || []).map(photo => ({
         id: photo.id,
         photographerId: photo.user_id,
-        photographerName: photo.profiles?.name || 'Unknown',
+        photographerName: photo.profiles?.full_name || 'Unknown', // ✅ fixed here
         url: photo.url,
         caption: photo.caption,
         approved: photo.approved,
@@ -194,12 +194,46 @@ const location = useLocation();
         createdAt: photo.created_at
       }));
 
+
       setPhotos(photosData);
     } catch (error) {
       console.error('Error in fetchPhotos:', error);
       setPhotos([]);
     }
   }, []);
+
+  const fetchUsers = useCallback(async () => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching users:', error);
+      showNotification('Failed to load users', 'error');
+      return;
+    }
+
+    // Transform the data to match your expected format
+    const usersData = (data || []).map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role || 'user', // Default to 'user' if no role
+      country: user.country,
+      status: user.status || 'active', // Default to 'active' if no status
+      createdAt: user.created_at,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=6b7280&color=fff`
+    }));
+
+    setUsers(usersData);
+    console.log('Fetched users:', usersData); // Debug log
+  } catch (error) {
+    console.error('Error in fetchUsers:', error);
+    setUsers([]);
+  }
+}, [showNotification]);
 
   const fetchPhotoReviews = useCallback(async () => {
     try {
@@ -739,17 +773,37 @@ const handlePhotoUpload = async (caption, file) => {
   };
 
   // ============ HELPER FUNCTIONS ============
-  const getUserPhotos = (userId) => photoReviews.filter(photo => photo.photographerId === userId);
+  // const getUserPhotos = (userId) => photoReviews.filter(photo => photo.photographerId === userId);
+  const getUserPhotos = (userId) => {
+  if (!userId) return [];
+  
+  // Get all photos for this user (both approved and pending)
+  const approvedPhotos = photos.filter(photo => photo.photographerId === userId);
+  const pendingPhotos = photoReviews.filter(photo => photo.photographerId === userId);
+  
+  // Combine and mark with status
+  const allUserPhotos = [
+    ...approvedPhotos.map(photo => ({ ...photo, status: 'approved' })),
+    ...pendingPhotos.map(photo => ({ ...photo, status: 'pending' }))
+  ];
+  
+  return allUserPhotos;
+};
 
   const getUserPhotoStats = (userId) => {
-    const userPhotos = getUserPhotos(userId);
-    return {
-      total: userPhotos.length,
-      pending: userPhotos.filter(p => p.status === 'pending').length,
-      approved: userPhotos.filter(p => p.status === 'approved').length,
-      rejected: userPhotos.filter(p => p.status === 'rejected').length
-    };
+  if (!userId) return { total: 0, pending: 0, approved: 0, rejected: 0 };
+  
+  const userPhotos = getUserPhotos(userId);
+  const approvedCount = photos.filter(photo => photo.photographerId === userId).length;
+  const pendingCount = photoReviews.filter(photo => photo.photographerId === userId).length;
+  
+  return {
+    total: userPhotos.length,
+    pending: pendingCount,
+    approved: approvedCount,
+    rejected: 0 // You'd need to track rejected photos separately if needed
   };
+};
 
   // ============ EFFECTS ============
   useEffect(() => {
@@ -758,23 +812,24 @@ const handlePhotoUpload = async (caption, file) => {
   }, [fetchPhotographers, fetchPhotos]);
 
   useEffect(() => {
-    if (currentUser?.role === 'admin' && location.pathname === '/admin') {
-      const loadAdminData = async () => {
-        try {
-          await Promise.all([
-            fetchPhotographers(),
-            fetchPhotos(),
-            fetchPhotoReviews(),
-            fetchApplications()
-          ]);
-        } catch (error) {
-          console.error('Error loading admin data:', error);
-          showNotification('Some admin data failed to load', 'error');
-        }
-      };
-      loadAdminData();
-    }
-  }, [currentUser?.id, fetchPhotographers, fetchPhotos, fetchPhotoReviews, fetchApplications, showNotification, location.pathname]);
+  if (currentUser?.role === 'admin' && location.pathname === '/admin') {
+    const loadAdminData = async () => {
+      try {
+        await Promise.all([
+          fetchPhotographers(),
+          fetchPhotos(),
+          fetchPhotoReviews(),
+          fetchApplications(),
+          fetchUsers() // Add this line
+        ]);
+      } catch (error) {
+        console.error('Error loading admin data:', error);
+        showNotification('Some admin data failed to load', 'error');
+      }
+    };
+    loadAdminData();
+  }
+}, [currentUser?.id, fetchPhotographers, fetchPhotos, fetchPhotoReviews, fetchApplications, fetchUsers, showNotification, location.pathname]);
 
   // ============ HEADER COMPONENT ============
   const Header = () => (
@@ -859,7 +914,68 @@ const handlePhotoUpload = async (caption, file) => {
       <div className="main-content">
         <div className="container">
           <Routes>
-            <Route path="/" element={<HomePage photos={photos} />} />
+            <Route
+              path="/"
+              element={
+                <HomePage
+                  photos={photos}
+                  currentUser={currentUser}
+                  onLikePhoto={async (photoId, liked) => {
+  if (!currentUser) return;
+
+  const photo = photos.find(p => p.id === photoId);
+  if (!photo) return;
+
+  const updatedLikes = liked
+    ? (photo.likes || 0) + 1
+    : Math.max((photo.likes || 1) - 1, 0);
+
+  const { error } = await supabase
+    .from('photos')
+    .update({ likes: updatedLikes })
+    .eq('id', photoId);
+
+  if (error) {
+    console.error('❌ Failed to update likes:', error);
+    return;
+  }
+
+  // ✅ Immediately fetch updated photos
+  fetchPhotos();
+}}
+
+
+                  onCommentPhoto={async (photoId, commentText) => {
+  if (!currentUser || !commentText.trim()) return;
+
+  const { error } = await supabase
+    .from('comments')
+    .insert([
+      {
+        photo_id: photoId,
+        user_id: currentUser.id,
+        comment: commentText.trim(),
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+
+  if (error) {
+    console.error('❌ Failed to save comment:', error);
+  } else {
+    console.log('✅ Comment saved to Supabase');
+
+    // ✅ OPTIONAL: Refetch photos or comments if needed
+    // If comments are shown via fetchComments(), no need to refetch photos here
+  }
+}}
+
+
+
+                  onViewPhotographer={viewPhotographer}
+                />
+              }
+            />
+
             <Route path="/login" element={<Login onLogin={login} />} />
             <Route path="/register" element={<Register onRegister={register} />} />
             <Route path="/directory" element={
@@ -896,6 +1012,7 @@ const handlePhotoUpload = async (caption, file) => {
                 isUpdatingProfile={isUpdatingProfile}
                 userPhotos={getUserPhotos(currentUser?.id)}
                 photoStats={getUserPhotoStats(currentUser?.id)}
+                key={currentUser?.id}
               />
             } />
             <Route path="/admin" element={
@@ -910,7 +1027,8 @@ const handlePhotoUpload = async (caption, file) => {
                 onRejectPhoto={rejectPhoto}
               />
             } />
-          </Routes>
+        </Routes>
+
         </div>
       </div>
     </div>

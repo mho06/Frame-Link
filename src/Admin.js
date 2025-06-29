@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 const Admin = ({ 
   currentUser, 
@@ -14,16 +14,94 @@ const Admin = ({
   onDeactivateUser // New function to deactivate users
 }) => {
   const [adminSection, setAdminSection] = useState('applications');
+  const [isLoading, setIsLoading] = useState(true);
 
   // Debug effect to log data
   useEffect(() => {
     console.log('Admin component received:');
-    console.log('- Applications:', applications.length);
-    console.log('- Photo Reviews:', photoReviews.length);
-    console.log('- Approved Photos:', approvedPhotos.length);
-    console.log('- Users:', users.length);
+    console.log('- Applications:', applications?.length || 0);
+    console.log('- Photo Reviews:', photoReviews?.length || 0);
+    console.log('- Approved Photos:', approvedPhotos?.length || 0);
+    console.log('- Users:', users?.length || 0);
     console.log('- Users data:', users);
+    
+    // Set loading to false once we have some data or after a short delay
+    const timer = setTimeout(() => setIsLoading(false), 100);
+    return () => clearTimeout(timer);
   }, [applications, photoReviews, approvedPhotos, users]);
+
+  // Memoized statistics to prevent recalculation issues
+  // Replace the statistics calculation in your useMemo with this fixed version:
+
+const statistics = useMemo(() => {
+  const safeApplications = Array.isArray(applications) ? applications : [];
+  const safePhotoReviews = Array.isArray(photoReviews) ? photoReviews : [];
+  const safeApprovedPhotos = Array.isArray(approvedPhotos) ? approvedPhotos : [];
+  const safeUsers = Array.isArray(users) ? users : [];
+
+  console.log('Calculating statistics with:', {
+    safeUsers: safeUsers.length,
+    safeApplications: safeApplications.length,
+    safePhotoReviews: safePhotoReviews.length,
+    safeApprovedPhotos: safeApprovedPhotos.length
+  });
+
+  // Debug: Log user roles to see what values exist
+  console.log('User roles found:', safeUsers.map(user => ({ id: user?.id, role: user?.role, status: user?.status })));
+
+  return {
+    totalUsers: safeUsers.length,
+    // Fix: Check for multiple possible photographer role values
+    photographers: safeUsers.filter(user => 
+      user && 
+      (user.role === 'photographer' || user.role === 'Photographer' || user.role === 'PHOTOGRAPHER') && 
+      user.status !== 'deactivated'
+    ).length,
+    // Fix: Check for multiple possible user role values
+    regularUsers: safeUsers.filter(user => 
+      user && 
+      (user.role === 'user' || user.role === 'User' || user.role === 'USER' || !user.role) && 
+      user.status !== 'deactivated'
+    ).length,
+    deactivatedUsers: safeUsers.filter(user => 
+      user && (user.status === 'deactivated' || user.status === 'inactive')
+    ).length,
+    
+    // Applications - ensure we're filtering valid objects
+    pendingApplications: safeApplications.filter(app => 
+      app && typeof app === 'object' && app.status === 'pending'
+    ),
+    approvedApplications: safeApplications.filter(app => 
+      app && typeof app === 'object' && app.status === 'approved'
+    ).length,
+    rejectedApplications: safeApplications.filter(app => 
+      app && typeof app === 'object' && app.status === 'rejected'
+    ).length,
+    
+    // Photos - ensure we're filtering valid objects
+    pendingPhotoReviews: safePhotoReviews.filter(photo => 
+      photo && typeof photo === 'object' && photo.status === 'pending'
+    ),
+    approvedPhotosCount: safeApprovedPhotos.length,
+    rejectedPhotos: safePhotoReviews.filter(photo => 
+      photo && typeof photo === 'object' && photo.status === 'rejected'
+    ).length,
+    totalPhotosInSystem: safeApprovedPhotos.length + safePhotoReviews.length
+  };
+}, [applications, photoReviews, approvedPhotos, users]);
+
+  // Log calculated statistics for debugging
+  useEffect(() => {
+    console.log('Calculated statistics:', statistics);
+  }, [statistics]);
+  // Add this after your existing useEffect for debugging
+useEffect(() => {
+  if (users && users.length > 0) {
+    console.log('Sample user data structure:', users[0]);
+    console.log('All user roles:', users.map(u => u?.role));
+    console.log('All user statuses:', users.map(u => u?.status));
+  }
+}, [users]);
 
   // Only render if user is admin
   if (!currentUser || currentUser.role !== 'admin') {
@@ -32,6 +110,17 @@ const Admin = ({
         <div className="text-center">
           <h2>Access Denied</h2>
           <p>You need admin privileges to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state briefly to prevent flickering
+  if (isLoading) {
+    return (
+      <div className="page">
+        <div className="text-center">
+          <h2>Loading Admin Panel...</h2>
         </div>
       </div>
     );
@@ -81,32 +170,15 @@ const Admin = ({
 
   // Helper function to get photographer name
   const getPhotographerName = (photographerId) => {
-    const photographer = users.find(user => user.id === photographerId);
-    return photographer ? photographer.name : 'Unknown Photographer';
-  };
-
-  // Calculate real-time statistics
-  const statistics = {
-    totalUsers: users.length,
-    photographers: users.filter(user => user.role === 'photographer' && user.status !== 'deactivated').length,
-    regularUsers: users.filter(user => user.role === 'user' && user.status !== 'deactivated').length,
-    deactivatedUsers: users.filter(user => user.status === 'deactivated').length,
-    
-    // Applications
-    pendingApplications: applications.filter(app => app && app.status === 'pending'),
-    approvedApplications: applications.filter(app => app && app.status === 'approved').length,
-    rejectedApplications: applications.filter(app => app && app.status === 'rejected').length,
-    
-    // Photos
-    pendingPhotoReviews: photoReviews.filter(photo => photo && photo.status === 'pending'),
-    approvedPhotosCount: approvedPhotos.length,
-    rejectedPhotos: photoReviews.filter(photo => photo && photo.status === 'rejected').length,
-    totalPhotosInSystem: approvedPhotos.length + photoReviews.length
+    if (!Array.isArray(users) || !photographerId) return 'Unknown Photographer';
+    const photographer = users.find(user => user?.id === photographerId);
+    return photographer?.name || 'Unknown Photographer';
   };
 
   // Enhanced User Management Section 
   const renderUserManagement = () => {
-    const activeUsers = users.filter(user => user.status !== 'deactivated');
+    const safeUsers = Array.isArray(users) ? users : [];
+    const activeUsers = safeUsers.filter(user => user?.status !== 'deactivated');
 
     return (
       <div className="admin-section">
@@ -175,6 +247,9 @@ const Admin = ({
 
   // Enhanced Reports Section
   const renderReports = () => {
+    const safeApplications = Array.isArray(applications) ? applications : [];
+    const safePhotoReviews = Array.isArray(photoReviews) ? photoReviews : [];
+
     return (
       <div className="admin-section">
         <h2 className="mb-2">Platform Statistics & Reports</h2>
@@ -209,7 +284,7 @@ const Admin = ({
           <div className="flex gap-2" style={{ justifyContent: 'space-around', textAlign: 'center' }}>
             <div>
               <h4>Total Applications</h4>
-              <div className="stat-number">{applications.length}</div>
+              <div className="stat-number">{safeApplications.length}</div>
             </div>
             <div>
               <h4>Pending</h4>
@@ -263,15 +338,17 @@ const Admin = ({
           <div className="mb-2">
             <h4>This Week:</h4>
             <ul style={{ marginLeft: '20px' }}>
-              <li>New applications: {applications.filter(app => {
+              <li>New applications: {safeApplications.filter(app => {
+                if (!app?.submittedAt) return false;
                 const weekAgo = new Date();
                 weekAgo.setDate(weekAgo.getDate() - 7);
-                return app.submittedAt && new Date(app.submittedAt) > weekAgo;
+                return new Date(app.submittedAt) > weekAgo;
               }).length}</li>
-              <li>Photos submitted: {photoReviews.filter(photo => {
+              <li>Photos submitted: {safePhotoReviews.filter(photo => {
+                if (!photo?.submittedAt) return false;
                 const weekAgo = new Date();
                 weekAgo.setDate(weekAgo.getDate() - 7);
-                return photo.submittedAt && new Date(photo.submittedAt) > weekAgo;
+                return new Date(photo.submittedAt) > weekAgo;
               }).length}</li>
             </ul>
           </div>
@@ -301,16 +378,22 @@ const Admin = ({
           <h4>Debug Information</h4>
           <p><strong>Data received:</strong></p>
           <ul style={{ marginLeft: '20px', fontSize: '14px' }}>
-            <li>Applications: {applications.length}</li>
-            <li>Photo Reviews: {photoReviews.length}</li>
-            <li>Approved Photos: {approvedPhotos.length}</li>
-            <li>Users: {users.length}</li>
+            <li>Applications: {Array.isArray(applications) ? applications.length : 'Not an array'}</li>
+            <li>Photo Reviews: {Array.isArray(photoReviews) ? photoReviews.length : 'Not an array'}</li>
+            <li>Approved Photos: {Array.isArray(approvedPhotos) ? approvedPhotos.length : 'Not an array'}</li>
+            <li>Users: {Array.isArray(users) ? users.length : 'Not an array'}</li>
           </ul>
-          {users.length === 0 && (
+          {(!Array.isArray(users) || users.length === 0) && (
             <p style={{ color: '#dc3545', fontWeight: 'bold' }}>
               ⚠️ No users data received. Make sure the users prop is being passed correctly.
             </p>
           )}
+          <div style={{ marginTop: '10px', fontSize: '12px' }}>
+            <p><strong>Statistics calculated:</strong></p>
+            <pre style={{ fontSize: '11px', backgroundColor: '#fff', padding: '5px', border: '1px solid #ccc' }}>
+              {JSON.stringify(statistics, null, 2)}
+            </pre>
+          </div>
         </div>
       </div>
     );
@@ -357,36 +440,40 @@ const Admin = ({
   );
 
   // Approved Photos Section
-  const renderApprovedPhotos = () => (
-    <div className="admin-section">
-      <h2 className="mb-2">Approved Photos ({statistics.approvedPhotosCount})</h2>
-      <div className="mb-2">
-        <p>These photos are currently live on the platform and visible to users.</p>
+  const renderApprovedPhotos = () => {
+    const safeApprovedPhotos = Array.isArray(approvedPhotos) ? approvedPhotos : [];
+    
+    return (
+      <div className="admin-section">
+        <h2 className="mb-2">Approved Photos ({statistics.approvedPhotosCount})</h2>
+        <div className="mb-2">
+          <p>These photos are currently live on the platform and visible to users.</p>
+        </div>
+        
+        {safeApprovedPhotos.length === 0 ? (
+          <div className="admin-card">
+            <p>No approved photos yet.</p>
+          </div>
+        ) : (
+          <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+            {safeApprovedPhotos.map(photo => (
+              <div key={photo.id} className="admin-card">
+                <img 
+                  src={photo.url} 
+                  alt={photo.caption || 'Approved photo'}
+                  style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }}
+                  onClick={() => window.open(photo.url, '_blank')}
+                />
+                <h4>{photo.caption || 'No caption'}</h4>
+                <p><strong>Photographer:</strong> {getPhotographerName(photo.photographerId)}</p>
+                <p><strong>Approved:</strong> {formatDate(photo.approvedAt)}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      
-      {approvedPhotos.length === 0 ? (
-        <div className="admin-card">
-          <p>No approved photos yet.</p>
-        </div>
-      ) : (
-        <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-          {approvedPhotos.map(photo => (
-            <div key={photo.id} className="admin-card">
-              <img 
-                src={photo.url} 
-                alt={photo.caption || 'Approved photo'}
-                style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }}
-                onClick={() => window.open(photo.url, '_blank')}
-              />
-              <h4>{photo.caption || 'No caption'}</h4>
-              <p><strong>Photographer:</strong> {getPhotographerName(photo.photographerId)}</p>
-              <p><strong>Approved:</strong> {formatDate(photo.approvedAt)}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="page">
@@ -468,7 +555,7 @@ const Admin = ({
               {statistics.pendingApplications.length === 0 ? (
                 <div className="admin-card">
                   <p>No pending applications at the moment.</p>
-                  {applications.length > 0 && (
+                  {Array.isArray(applications) && applications.length > 0 && (
                     <p><em>Total applications in system: {applications.length}</em></p>
                   )}
                 </div>
@@ -478,7 +565,7 @@ const Admin = ({
                   
                   return (
                     <div key={app.id} className="admin-card">
-                      <div className="flex justify-between items-start">
+                      <div>
                         <div style={{ flex: 1 }}>
                           <h3>{app.name || 'Unknown Name'}</h3>
                           <p><strong>Email:</strong> {app.email || 'No email provided'}</p>
@@ -552,7 +639,7 @@ const Admin = ({
             </div>
             
             {/* Show all applications section */}
-            {applications.length > statistics.pendingApplications.length && (
+            {Array.isArray(applications) && applications.length > statistics.pendingApplications.length && (
               <div className="mt-2">
                 <h3>All Applications ({applications.length})</h3>
                 <div className="admin-card">

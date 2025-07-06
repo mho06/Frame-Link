@@ -71,6 +71,7 @@ const App = () => {
   const [photoReviews, setPhotoReviews] = useState([]);
   const [users, setUsers] = useState([]);
   const [selectedPhotographer, setSelectedPhotographer] = useState(null);
+  const [isLoadingPhotographers, setIsLoadingPhotographers] = useState(false);
 
   // Loading states
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -109,42 +110,80 @@ const location = useLocation();
   };
 
   // ============ DATABASE FUNCTIONS ============
-  const fetchPhotographers = useCallback(async () => {
-    try {
-      const { data: approvedApps, error } = await supabase
-        .from('applications')
-        .select('*')
-        .eq('status', 'approved')
-        .limit(20);
+  // 1. Fix the photographer data mapping in App.js fetchPhotographers function
+const fetchPhotographers = useCallback(async () => {
+  setIsLoadingPhotographers(true);
+  try {
+    // Fetch approved applications (photographers)
+    const { data: approvedApps, error: appsError } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('status', 'approved');
 
-      if (error) {
-        console.error('Error fetching photographers:', error);
-        showNotification('Failed to load photographers', 'error');
-        return;
-      }
-
-      const photographersData = (approvedApps || []).map(app => ({
-        id: app.user_id,
-        name: app.name,
-        email: app.email,
-        country: app.country || 'Unknown',
-        specialization: app.specialization,
-        bio: app.bio,
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=667eea&color=fff`,
-        availability: "available",
-        verified: true,
-        photoCount: 0,
-        followers: 0,
-        role: 'photographer'
-      }));
-
-      setPhotographers(photographersData);
-    } catch (error) {
-      console.error('Error in fetchPhotographers:', error);
+    if (appsError) {
+      console.error('Error fetching photographers:', appsError);
+      showNotification('Failed to load photographers', 'error');
       setPhotographers([]);
+      return;
     }
-  }, [showNotification]);
 
+    // Fetch all approved photos to count by user
+    const { data: photoData, error: photoError } = await supabase
+      .from('photos')
+      .select('user_id')
+      .eq('approved', true);
+
+    if (photoError) {
+      console.error('Error fetching photos for counts:', photoError);
+    }
+
+    // Count photos per photographer
+    const photoCountMap = {};
+    photoData?.forEach(photo => {
+      const userId = photo.user_id;
+      photoCountMap[userId] = (photoCountMap[userId] || 0) + 1;
+    });
+
+    // Enrich photographers with extra info
+    const enrichedPhotographers = approvedApps.map(app => ({
+      id: app.user_id,
+      name: app.name,
+      email: app.email,
+      bio: app.bio || '',
+      specialization: app.specialization || '',
+      country: app.country || '',
+      avatar: app.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(app.name)}&background=667eea&color=fff`,
+      availability: app.availability || 'available',
+      followers: 0,
+      role: 'photographer',
+      verified: true,
+      photoCount: photoCountMap[app.user_id] || 0
+    }));
+
+    console.log('✅ Loaded photographers:', enrichedPhotographers);
+    setPhotographers(enrichedPhotographers);
+    console.log("Photographers set:", enrichedPhotographers);
+
+
+  } catch (error) {
+    console.error('Error in fetchPhotographers:', error);
+    showNotification('Connection error loading photographers', 'error');
+    setPhotographers([]);
+  } finally {
+    setIsLoadingPhotographers(false);
+  }
+}, [showNotification]);
+
+
+// Add this to test your connection
+const testConnection = async () => {
+  try {
+    const { data, error } = await supabase.from('applications').select('count').limit(1);
+    console.log('Supabase connection test:', { data, error });
+  } catch (err) {
+    console.error('Supabase connection failed:', err);
+  }
+};
   const fetchPhotos = useCallback(async () => {
     try {
       // Try with join first
@@ -371,37 +410,22 @@ const location = useLocation();
 
   // ============ AUTHENTICATION FUNCTIONS ============
   const login = async (userData) => {
-    setIsLoggingIn(true);
-    try {
-      let userWithCorrectRole = { ...userData };
-      
-      if (userData.role !== 'admin') {
-        const isPhotographer = await checkUserPhotographerStatus(userData.id);
-        if (isPhotographer) {
-          userWithCorrectRole.role = 'photographer';
-          
-          if (userData.role !== 'photographer') {
-            await supabase
-              .from('profiles')
-              .update({ role: 'photographer' })
-              .eq('id', userData.id);
-          }
-        }
-      }
-      
-      setCurrentUser(userWithCorrectRole);
-      localStorage.setItem('currentUser', JSON.stringify(userWithCorrectRole));
-      
-      showNotification('Login successful!', 'success');
-      navigate('/');
-      
-    } catch (error) {
-      console.error('Login error:', error);
-      showNotification('Login failed', 'error');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
+  setIsLoggingIn(true);
+  try {
+    // Remove the async photographer check for now since it's causing delays
+    setCurrentUser(userData);
+    localStorage.setItem('currentUser', JSON.stringify(userData));
+    
+    showNotification('Login successful!', 'success');
+    navigate('/');
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    showNotification('Login failed', 'error');
+  } finally {
+    setIsLoggingIn(false);
+  }
+};
 
   const register = async (name, email, password, country) => {
     setIsLoggingIn(true);
@@ -741,36 +765,46 @@ const handlePhotoUpload = async (caption, file) => {
 
 
   const handleProfileUpdate = async (bio, availability, avatarFile, removeAvatar) => {
-    setIsUpdatingProfile(true);
-    try {
-      let newAvatarUrl = selectedPhotographer?.avatar;
+  setIsUpdatingProfile(true);
+  try {
+    let newAvatarUrl = selectedPhotographer?.avatar;
 
-      if (removeAvatar) {
-        newAvatarUrl = '';
-      } else if (avatarFile) {
-        const reader = new FileReader();
-        newAvatarUrl = await new Promise((resolve) => {
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(avatarFile);
-        });
-      }
-
-      setPhotographers(prev => prev.map(p => 
-        p.id === currentUser.id ? { ...p, bio, availability, avatar: newAvatarUrl } : p
-      ));
-      
-      if (selectedPhotographer && selectedPhotographer.id === currentUser.id) {
-        setSelectedPhotographer(prev => ({ ...prev, bio, availability, avatar: newAvatarUrl }));
-      }
-      
-      showNotification('Profile updated successfully!', 'success');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      showNotification('Failed to update profile', 'error');
-    } finally {
-      setIsUpdatingProfile(false);
+    if (removeAvatar) {
+      newAvatarUrl = '';
+    } else if (avatarFile) {
+      const reader = new FileReader();
+      newAvatarUrl = await new Promise((resolve) => {
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(avatarFile);
+      });
     }
-  };
+
+    // Update photographers array
+    setPhotographers(prev => prev.map(p => 
+      p.id === currentUser.id ? { ...p, bio, availability, avatar: newAvatarUrl } : p
+    ));
+    
+    // Update selected photographer immediately
+    if (selectedPhotographer && selectedPhotographer.id === currentUser.id) {
+      const updatedPhotographer = { ...selectedPhotographer, bio, availability, avatar: newAvatarUrl };
+      setSelectedPhotographer(updatedPhotographer);
+    }
+    
+    // Update current user if avatar changed
+    if (currentUser.id === selectedPhotographer?.id) {
+      const updatedUser = { ...currentUser, avatar: newAvatarUrl };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+    }
+    
+    showNotification('Profile updated successfully!', 'success');
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    showNotification('Failed to update profile', 'error');
+  } finally {
+    setIsUpdatingProfile(false);
+  }
+};
 
   // ============ HELPER FUNCTIONS ============
   // const getUserPhotos = (userId) => photoReviews.filter(photo => photo.photographerId === userId);
@@ -809,7 +843,9 @@ const handlePhotoUpload = async (caption, file) => {
   useEffect(() => {
     fetchPhotographers();
     fetchPhotos();
-  }, [fetchPhotographers, fetchPhotos]);
+  }, []);
+
+  
 
   useEffect(() => {
   if (currentUser?.role === 'admin' && location.pathname === '/admin') {

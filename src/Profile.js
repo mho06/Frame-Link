@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isOwnProfile, onProfileUpdate }) => {
   const [avatarPreview, setAvatarPreview] = useState(photographer?.avatar || '');
@@ -8,6 +8,92 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
     bio: '',
     availability: 'available'
   });
+
+  // Country code to full name mapping
+  const country = {
+    'US': 'United States',
+    'CA': 'Canada',
+    'GB': 'United Kingdom',
+    'DE': 'Germany',
+    'FR': 'France',
+    'IT': 'Italy',
+    'ES': 'Spain',
+    'AU': 'Australia',
+    'JP': 'Japan',
+    'CN': 'China',
+    'IN': 'India',
+    'BR': 'Brazil',
+    'MX': 'Mexico',
+    'RU': 'Russia',
+    'KR': 'South Korea',
+    'NL': 'Netherlands',
+    'SE': 'Sweden',
+    'NO': 'Norway',
+    'DK': 'Denmark',
+    'FI': 'Finland',
+    'CH': 'Switzerland',
+    'AT': 'Austria',
+    'BE': 'Belgium',
+    'IE': 'Ireland',
+    'PT': 'Portugal',
+    'PL': 'Poland',
+    'CZ': 'Czech Republic',
+    'HU': 'Hungary',
+    'GR': 'Greece',
+    'TR': 'Turkey',
+    'ZA': 'South Africa',
+    'EG': 'Egypt',
+    'IL': 'Israel',
+    'AE': 'United Arab Emirates',
+    'SA': 'Saudi Arabia',
+    'TH': 'Thailand',
+    'SG': 'Singapore',
+    'MY': 'Malaysia',
+    'ID': 'Indonesia',
+    'PH': 'Philippines',
+    'VN': 'Vietnam',
+    'NZ': 'New Zealand',
+    'AR': 'Argentina',
+    'CL': 'Chile',
+    'CO': 'Colombia',
+    'PE': 'Peru',
+    'VE': 'Venezuela',
+    'EC': 'Ecuador',
+    'UY': 'Uruguay',
+    'PY': 'Paraguay',
+    'BO': 'Bolivia',
+    'CR': 'Costa Rica',
+    'PA': 'Panama',
+    'GT': 'Guatemala',
+    'HN': 'Honduras',
+    'NI': 'Nicaragua',
+    'SV': 'El Salvador',
+    'DO': 'Dominican Republic',
+    'CU': 'Cuba',
+    'JM': 'Jamaica',
+    'TT': 'Trinidad and Tobago',
+    'BB': 'Barbados',
+    'BS': 'Bahamas',
+    'BZ': 'Belize',
+    'GY': 'Guyana',
+    'SR': 'Suriname',
+    'GF': 'French Guiana',
+    'FK': 'Falkland Islands',
+    'GS': 'South Georgia'
+  };
+
+  // Update avatar preview when photographer prop changes
+  useEffect(() => {
+    if (photographer?.avatar) {
+      setAvatarPreview(photographer.avatar);
+    }
+  }, [photographer?.avatar]);
+
+  // Helper function to get full country name
+  const getCountryName = (countryCode) => {
+    if (!countryCode) return '';
+    return country[countryCode.toUpperCase()] || countryCode;
+  };
 
   if (!photographer) {
     return (
@@ -65,31 +151,34 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
   };
 
   const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        alert('Please select an image file');
-        return;
-      }
-
-      if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB');
-        return;
-      }
-
-      setAvatarFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+  const file = e.target.files[0];
+  if (file) {
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
     }
-  };
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB');
+      return;
+    }
+
+    setAvatarFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const newPreview = reader.result;
+      setAvatarPreview(newPreview);
+      // Don't call onProfileUpdate here - let user confirm changes
+    };
+    reader.readAsDataURL(file);
+  }
+};
 
   const handleRemoveAvatar = () => {
-    setAvatarFile(null);
-    setAvatarPreview('');
-  };
+  setAvatarFile(null);
+  setAvatarPreview('');
+  // Don't call onProfileUpdate here - let user confirm changes
+};
 
   const getAvailabilityBadgeStyle = (availability) => {
     const styles = {
@@ -109,12 +198,25 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
     return texts[availability] || 'Available';
   };
 
+  // Add cache busting to avatar URL to force refresh
+  const getAvatarUrl = (url) => {
+    if (!url) return '';
+    // Add timestamp to bust cache
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}t=${Date.now()}`;
+  };
+
   return (
     <div className="page">
       <div className="profile-header">
         <div className="profile-avatar-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
           {avatarPreview ? (
-            <img src={avatarPreview} alt="Profile" className="profile-avatar" />
+            <img 
+              src={getAvatarUrl(avatarPreview)} 
+              alt="Profile" 
+              className="profile-avatar" 
+              key={avatarPreview} // Force re-render when URL changes
+            />
           ) : (
             <div className="initials-avatar" style={{
               width: '100px',
@@ -179,14 +281,16 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
 
         <h1 className="profile-name">{photographer.name}</h1>
 
-        {/* Role Badge - Always show */}
+        <div className="profile-info" style={{display: "flex", justifyContent: "center", alignItems: "center",flexDirection: "column"}}>
+          {/* Role Badge - Always show */}
         <div
           className="verified-badge"
           style={{
             backgroundColor: roleInfo.bgColor,
+            width: '50%',
             color: roleInfo.color,
             border: `1px solid ${roleInfo.color}`,
-            padding: '4px 12px',
+            padding: '4px 5px',
             borderRadius: '20px',
             fontSize: '14px',
             fontWeight: '500',
@@ -202,6 +306,7 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
             className="availability-badge"
             style={{
               ...getAvailabilityBadgeStyle(photographer.availability),
+              width: '50%',
               padding: '4px 12px',
               borderRadius: '20px',
               fontSize: '14px',
@@ -212,6 +317,7 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
             {getAvailabilityText(photographer.availability)}
           </div>
         )}
+        </div>
 
         {isEditing ? (
           <div className="mt-2" style={{ width: '100%', maxWidth: '500px' }}>
@@ -257,17 +363,17 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
             {isOwnProfile && (
               <div className="mt-2 text-center">
                 <p><strong>Email:</strong> {photographer.email}</p>
-                {photographer.country && <p><strong>Country:</strong> {photographer.country}</p>}
+                {photographer.country && <p><strong>Country:</strong> {getCountryName(photographer.country)}</p>}
               </div>
             )}
           </>
         )}
 
-        {!isEditing && isOwnProfile && (
+        {/* {!isEditing && isOwnProfile && (
           <div className="mt-2">
             <button className="btn btn-secondary" onClick={handleEditClick}>Edit Profile</button>
           </div>
-        )}
+        )} */}
 
         {!isOwnProfile && photographer.role === 'photographer' && (
           <div className="mt-2">
@@ -283,7 +389,7 @@ const Profile = ({ photographer, photos, onContactPhotographer, currentUser, isO
 
       {photographerPhotos.length > 0 ? (
         <div>
-          <h2 className="section-title">
+          <h2 className="section-title" style={{display: "flex", justifyContent: "center"}}>
             {isOwnProfile ? 'My Photos' : `${photographer.name}'s Photos`}
           </h2>
           <div className="photo-grid">
